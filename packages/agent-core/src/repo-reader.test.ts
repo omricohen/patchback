@@ -33,7 +33,10 @@ describe('readRepoConventions', () => {
     const conventions = await readRepoConventions(repoDir);
     expect(conventions.packageName).toBe('fixture-app');
     expect(conventions.packageManager).toBe('pnpm');
-    expect(conventions.scripts).toEqual({ lint: 'eslint .', test: 'vitest run' });
+    expect(conventions.scripts).toEqual({
+      lint: 'eslint .',
+      test: 'vitest run',
+    });
     expect(conventions.docs.readme).toBe('# Fixture app');
     expect(conventions.docs.contributing).toBe('Be nice.');
     expect(conventions.docs.agents).toBe('Use pnpm.');

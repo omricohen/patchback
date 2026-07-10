@@ -32,9 +32,7 @@ export interface DetectedCheck {
  * Detect runnable checks from a repo's `scripts` map. Order is fixed:
  * lint → typecheck → test (cheapest feedback first).
  */
-export function detectChecks(
-  scripts: Record<string, string>,
-): DetectedCheck[] {
+export function detectChecks(scripts: Record<string, string>): DetectedCheck[] {
   const detected: DetectedCheck[] = [];
   for (const name of CHECK_NAMES) {
     for (const key of SCRIPT_ALIASES[name]) {
@@ -120,7 +118,8 @@ export async function runChecks(
     const result: CheckResult = {
       name: check.name,
       command,
-      passed: !outcome.timedOut && !outcome.spawnError && outcome.exitCode === 0,
+      passed:
+        !outcome.timedOut && !outcome.spawnError && outcome.exitCode === 0,
       exitCode: outcome.exitCode,
       outputTail: tail(outcome.combined, tailChars),
       durationMs,

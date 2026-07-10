@@ -44,7 +44,10 @@ const DOC_CANDIDATES: ReadonlyArray<
   readonly [keyof RepoConventions['docs'], readonly string[]]
 > = [
   ['readme', ['README.md', 'README', 'readme.md', 'Readme.md']],
-  ['contributing', ['CONTRIBUTING.md', 'CONTRIBUTING', '.github/CONTRIBUTING.md']],
+  [
+    'contributing',
+    ['CONTRIBUTING.md', 'CONTRIBUTING', '.github/CONTRIBUTING.md'],
+  ],
   ['agents', ['AGENTS.md', 'CLAUDE.md']],
 ];
 

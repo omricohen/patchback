@@ -47,7 +47,12 @@ describe('git helpers', () => {
   it('clone + new branch + numstat round-trip', async () => {
     const sourceDir = path.join(workDir, 'source');
     const cloneDir = path.join(workDir, 'clone');
-    await runGit(workDir, ['init', '--quiet', '--initial-branch=main', 'source']);
+    await runGit(workDir, [
+      'init',
+      '--quiet',
+      '--initial-branch=main',
+      'source',
+    ]);
     await runGit(sourceDir, ['config', 'user.email', 'test@example.com']);
     await runGit(sourceDir, ['config', 'user.name', 'Patchback Test']);
     await writeFile(path.join(sourceDir, 'a.txt'), 'one\ntwo\nthree\n');

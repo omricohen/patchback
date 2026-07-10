@@ -13,7 +13,11 @@ export class GitCommandError extends Error {
   readonly exitCode: number | null;
   readonly stderr: string;
 
-  constructor(args: readonly string[], exitCode: number | null, stderr: string) {
+  constructor(
+    args: readonly string[],
+    exitCode: number | null,
+    stderr: string,
+  ) {
     super(
       `git ${args.join(' ')} failed (exit ${exitCode ?? 'signal'}): ${stderr.trim()}`,
     );
