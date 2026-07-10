@@ -1,0 +1,21 @@
+# extraction source material — never committed
+extraction-inbox/
+
+# secrets
+.env
+.env.*
+!.env.example
+
+# dependencies & build output
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# tooling caches
+.turbo/
+.a5c/
+.eslintcache
+
+# OS
+.DS_Store
