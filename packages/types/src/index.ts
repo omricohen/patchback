@@ -1,2 +1,11 @@
-// Placeholder — implemented in its build-plan phase. See docs/BUILD_PLAN.md.
-export const PACKAGE_NAME = '@patchback/types';
+/**
+ * @patchback/types — shared contract for the whole monorepo.
+ *
+ * Feedback items, capture context, trust tiers, triage results, and the
+ * canonical job state machine. Everything else imports from here; nothing
+ * here imports from anywhere else.
+ */
+export * from './trust.js';
+export * from './capture.js';
+export * from './triage.js';
+export * from './feedback.js';
