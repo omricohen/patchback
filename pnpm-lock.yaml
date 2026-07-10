@@ -43,6 +43,9 @@ importers:
       '@patchback/agent-core':
         specifier: workspace:*
         version: link:../agent-core
+      '@patchback/types':
+        specifier: workspace:*
+        version: link:../types
 
   packages/agent-core:
     dependencies:

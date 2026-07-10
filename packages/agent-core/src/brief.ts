@@ -1,4 +1,9 @@
-import { canInitiatePatchJob, type TrustTier } from '@patchback/types';
+import {
+  canInitiatePatchJob,
+  type FeedbackItem,
+  type TriageClassification,
+  type TrustTier,
+} from '@patchback/types';
 
 /**
  * A structured task brief: the ONLY instruction channel into an agent.
@@ -12,8 +17,12 @@ import { canInitiatePatchJob, type TrustTier } from '@patchback/types';
  * the file hints. Outsider feedback is data only: it may be stored and
  * clustered, but it is never instructions. Do not weaken this for convenience.
  *
- * {@link assertBriefSourceAllowed} is the defense-in-depth guard: call it with
- * the originating feedback's tier before building a brief.
+ * The guard is structural: adapters take a {@link GuardedTaskBrief}, which is
+ * branded so it cannot be object-literal-constructed — the ONLY producer is
+ * {@link createBriefFromTriagedFeedback}, which enforces both preconditions
+ * (patch-eligible tier AND `patchable` triage classification) and stamps the
+ * audit fields. {@link assertBriefSourceAllowed} remains the underlying tier
+ * check, called inside the factory.
  */
 export interface TaskBrief {
   /** Short imperative title, e.g. `Change button label "Save" to "Submit"`. */
@@ -53,11 +62,80 @@ export class BriefSourceNotAllowedError extends Error {
 
 /**
  * Guard for the trust boundary: throws unless the originating feedback's tier
- * is allowed to initiate a patch job. Call this before constructing a
- * {@link TaskBrief} from feedback content.
+ * is allowed to initiate a patch job. Called inside
+ * {@link createBriefFromTriagedFeedback}; exposed for defense-in-depth checks
+ * at other layers.
  */
 export function assertBriefSourceAllowed(tier: TrustTier): void {
   if (!canInitiatePatchJob(tier)) {
     throw new BriefSourceNotAllowedError(tier);
   }
+}
+
+/**
+ * Thrown when code attempts to build a brief from feedback that triage did
+ * not classify `patchable`. Triage before code: only `patchable` items may
+ * start a patch job.
+ */
+export class BriefNotPatchableError extends Error {
+  /** The item's actual classification, or undefined if it was never triaged. */
+  readonly classification: TriageClassification | undefined;
+
+  constructor(classification: TriageClassification | undefined) {
+    super(
+      classification === undefined
+        ? 'Feedback has not been triaged; only feedback classified ' +
+            '"patchable" may become a task brief.'
+        : `Feedback classified "${classification}" must never become a task ` +
+            'brief; only "patchable" items may start a patch job.',
+    );
+    this.name = 'BriefNotPatchableError';
+    this.classification = classification;
+  }
+}
+
+declare const briefFromTriagedFeedback: unique symbol;
+
+/**
+ * A TaskBrief that provably went through {@link createBriefFromTriagedFeedback}.
+ *
+ * The unique-symbol brand makes object-literal construction a type error
+ * anywhere outside this module — the factory is the only producer. Adapters
+ * (via `AgentContext`) require this type, so an orchestrator cannot hand an
+ * agent a brief that skipped the tier + triage checks.
+ */
+export interface GuardedTaskBrief extends TaskBrief {
+  /** The FeedbackItem this brief was derived from (always stamped). */
+  readonly feedbackId: string;
+  /** Trust tier of the originating feedback, for the audit trail. */
+  readonly sourceTier: TrustTier;
+  readonly [briefFromTriagedFeedback]: true;
+}
+
+/**
+ * The ONLY way to turn triaged feedback into a brief an agent will accept.
+ *
+ * Preconditions (both enforced, in this order):
+ * 1. `canInitiatePatchJob(item.trustTier)` — otherwise
+ *    {@link BriefSourceNotAllowedError}. Outsider feedback is data only.
+ * 2. `item.triage?.classification === 'patchable'` — otherwise
+ *    {@link BriefNotPatchableError}. Triage before code.
+ *
+ * Stamps `feedbackId` and `sourceTier` from the item; callers supply the
+ * remaining brief fields.
+ */
+export function createBriefFromTriagedFeedback(
+  item: FeedbackItem,
+  fields: Omit<TaskBrief, 'feedbackId'>,
+): GuardedTaskBrief {
+  assertBriefSourceAllowed(item.trustTier);
+  if (item.triage?.classification !== 'patchable') {
+    throw new BriefNotPatchableError(item.triage?.classification);
+  }
+  const brief: Omit<GuardedTaskBrief, typeof briefFromTriagedFeedback> = {
+    ...fields,
+    feedbackId: item.id,
+    sourceTier: item.trustTier,
+  };
+  return brief as GuardedTaskBrief;
 }
