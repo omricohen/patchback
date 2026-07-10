@@ -4,43 +4,55 @@ _Last updated: 2026-07-10_
 
 ## Current phase
 
-**Phase 1 (Shared types & job state machine) — DONE** on branch `phase-1-types` (not yet merged to `main`).
-Next up: **Phase 2 — Extraction pass** (Omri drives; source material lands in `/extraction-inbox/`).
+**Phase 3 (GitHub package, token mode) — DONE** on branch `phase-3-github` (not yet
+merged to `main`). Phase 2 (extraction pass) was skipped over for now — it's
+Omri-driven and no source material has landed in `extraction-inbox/` yet.
+Next up: **Phase 4 — Agent core + Claude Code adapter** (or Phase 2 whenever Omri
+drops material in the inbox).
 
 ## What's done
 
-- Phase 0 scaffold (see git history on `main`).
-- `packages/types` implemented as the shared contract:
-  - `trust.ts` — `TrustTier` (`owner | insider | outsider`), `PATCH_ELIGIBLE_TIERS`,
-    `canInitiatePatchJob()` (outsider always false), `isTrustTier()`.
-  - `capture.ts` — `CaptureContext` (all fields optional — capture is opt-in), plus
-    `ConsoleEntry`, `PickedElement`, `Viewport`; screenshot carries a `masked` flag.
-  - `triage.ts` — `TriageClassification` (`patchable | needs_clarification | needs_human`),
-    `TriageResult` (confidence, reasoning, clarifyingQuestion), `isTriageClassification()`.
-  - `feedback.ts` — `FeedbackItem` (message, trustTier, optional submitter/capture/triage).
-  - `job.ts` — canonical `JOB_STATES` (exact CLAUDE.md strings), `JOB_STATE_TRANSITIONS`
-    adjacency map, `INITIAL_JOB_STATE`, `canTransition` / `assertTransition` /
-    `nextJobStates` / `isTerminalJobState` / `isJobState`, `InvalidJobTransitionError`
-    (carries `from`/`to`), `Job` + `JobStateChange` history, pure `transitionJob()`.
-- Tests: 196 passing. The state-machine suite declares the legal transition list
-  independently of the implementation and sweeps all 144 state pairs — every legal
-  (11) and illegal (133) transition asserted, plus terminal states, error shape,
-  happy path, failure path, and immutability. Phase 1 acceptance met.
+- Phases 0–1 merged to `main` (scaffold; `packages/types` shared contract + job
+  state machine — see git history and earlier decisions).
+- `packages/github` implemented (token mode):
+  - `types.ts` — `GitHubClient` interface: `createIssue`, `createBranch`,
+    `commitFiles`, `openPullRequest`, `getPullRequestStatus`, plus input/result
+    types (`FileChange` supports content, mode, and explicit deletes). No merge
+    method exists on the surface, by design.
+  - `token-client.ts` — `createTokenClient()` taking token, owner, repo and
+    optional baseUrl / fetch / userAgent. Zero dependencies; direct `fetch`
+    against the GitHub REST API
+    (api-version 2022-11-28). `commitFiles` uses the git data API (ref → parent
+    commit → tree with `base_tree` → commit → non-force ref update) so one call =
+    one commit, deletes included. Default branch resolved lazily and cached.
+  - `errors.ts` — `GitHubApiError` (status, method, path, message, responseBody).
+  - `app-client.ts` — App mode STUB only: `GitHubAppConfig` + `createAppClient()`
+    which always throws `GitHubAppModeNotImplementedError` (roadmap, Phase 10).
+  - `README.md` — usage + minimum fine-grained token scopes: Contents R/W,
+    Issues R/W, Pull requests R/W, Metadata R.
+- Tests: 21 unit tests against an injected mock `fetch` (no network, no vi.stubGlobal
+  needed) covering every method, header auth, error mapping, default-branch caching,
+  tree/commit payloads, merged-vs-closed PR state. Plus `integration.test.ts` —
+  env-gated round-trip (issue → branch → commit → PR → status, with cleanup) behind
+  `GITHUB_TOKEN` + `PATCHBACK_TEST_REPO` (`owner/repo`); reported as skipped when
+  either is absent. No credentials were configured this session, so it was verified
+  as cleanly skipped, not executed.
 - Gate green: `pnpm lint && pnpm test && pnpm build` and `pnpm format:check` all pass.
 
 ## Next concrete step
 
-Phase 2: Omri drops source material into `extraction-inbox/`; for each file, generalize,
-strip client context per CLAUDE.md hygiene rules, move into the right package, delete
-from inbox. Accept: inbox empty, forbidden-term grep clean, gitleaks clean (gitleaks
-still not installed — see OPEN_ISSUES).
+Phase 4: `packages/agent-core` (adapter interface, repo-reader, scratch-dir
+lifecycle, check-runner) + `packages/agent-claude-code` (headless CLI adapter with
+diff-size ceiling). Before or alongside: run the integration round-trip once real
+credentials exist (`GITHUB_TOKEN` + `PATCHBACK_TEST_REPO` → scratch repo).
 
 ## Context to pick up cleanly
 
-- Decisions logged for Phase 1 in `.claude/DECISIONS.md`: only canonical edges modeled
-  (`feedback.needs_clarification`, `patch.failed`, `feedback.closed` are terminal — no
-  invented retry/clarification-loop edges yet), and `Job` carries an immutable transition
-  history with a pure `transitionJob()`.
-- `phase-1-types` branch is unmerged and unpushed; merge/PR is Omri's call.
-- Open issues: `.claude/OPEN_ISSUES.md` (SPEC.md provisional; gitleaks not installed;
-  no GitHub remote yet).
+- Phase 3 decisions in `.claude/DECISIONS.md`: zero-dep fetch client over octokit;
+  git-data-API commits; App mode stub throws; integration test env-gated and
+  self-cleaning; `@patchback/github` does NOT depend on `@patchback/types` (nothing
+  from the shared contract is needed at this layer — feedback→issue formatting
+  belongs to later phases).
+- `phase-3-github` branch is unmerged and unpushed; merge/PR is Omri's call.
+- Open issues: `.claude/OPEN_ISSUES.md` (SPEC.md provisional; gitleaks not
+  installed; no GitHub remote yet; Phase 2 pending Omri's source material).
