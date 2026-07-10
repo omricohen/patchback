@@ -1,5 +1,4 @@
-import { spawn } from 'node:child_process';
-
+import { runProcess } from './process.js';
 import type { PackageManager } from './repo-reader.js';
 
 /**
@@ -90,78 +89,6 @@ function tail(text: string, cap: number): string {
   return `… [output truncated]\n${text.slice(-cap)}`;
 }
 
-interface SpawnOutcome {
-  exitCode: number | null;
-  output: string;
-  timedOut: boolean;
-  spawnError?: string;
-}
-
-function runScript(
-  command: string,
-  args: string[],
-  cwd: string,
-  timeoutMs: number,
-  env?: Record<string, string>,
-): Promise<SpawnOutcome> {
-  return new Promise((resolve) => {
-    const posix = process.platform !== 'win32';
-    // detached puts the script and its grandchildren in their own process
-    // group so a timeout kill takes the whole tree down, not just the PM.
-    const child = spawn(command, args, {
-      cwd,
-      env: { ...process.env, ...env },
-      stdio: ['ignore', 'pipe', 'pipe'],
-      shell: !posix,
-      detached: posix,
-    });
-
-    let output = '';
-    let timedOut = false;
-    let settled = false;
-    const settle = (outcome: SpawnOutcome) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      resolve(outcome);
-    };
-
-    const killTree = () => {
-      try {
-        if (posix && child.pid !== undefined) {
-          process.kill(-child.pid, 'SIGKILL');
-        } else {
-          child.kill('SIGKILL');
-        }
-      } catch {
-        // Already gone.
-      }
-    };
-
-    const timer = setTimeout(() => {
-      timedOut = true;
-      killTree();
-    }, timeoutMs);
-
-    child.stdout.on('data', (chunk: Buffer) => (output += chunk.toString()));
-    child.stderr.on('data', (chunk: Buffer) => (output += chunk.toString()));
-
-    child.on('error', (error) =>
-      settle({ exitCode: null, output, timedOut, spawnError: error.message }),
-    );
-    // 'close' waits for stdio to drain; a surviving grandchild can hold the
-    // pipes open, so settle shortly after 'exit' if 'close' never arrives.
-    child.on('close', (code) => settle({ exitCode: code, output, timedOut }));
-    child.on('exit', (code) => {
-      const grace = setTimeout(
-        () => settle({ exitCode: code, output, timedOut }),
-        500,
-      );
-      grace.unref();
-    });
-  });
-}
-
 /**
  * Run the given checks (from {@link detectChecks}) in `repoDir` via the
  * detected package manager. Never throws for failing checks — failure is data.
@@ -183,13 +110,11 @@ export async function runChecks(
     const args = ['run', check.scriptKey];
     const command = `${packageManager} ${args.join(' ')}`;
     const startedAt = Date.now();
-    const outcome = await runScript(
-      packageManager,
-      args,
-      repoDir,
+    const outcome = await runProcess(packageManager, args, {
+      cwd: repoDir,
       timeoutMs,
-      options?.env,
-    );
+      ...(options?.env !== undefined ? { env: options.env } : {}),
+    });
     const durationMs = Date.now() - startedAt;
 
     const result: CheckResult = {
@@ -197,7 +122,7 @@ export async function runChecks(
       command,
       passed: !outcome.timedOut && !outcome.spawnError && outcome.exitCode === 0,
       exitCode: outcome.exitCode,
-      outputTail: tail(outcome.output, tailChars),
+      outputTail: tail(outcome.combined, tailChars),
       durationMs,
     };
     if (outcome.timedOut) {
