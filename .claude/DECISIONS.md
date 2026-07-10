@@ -41,3 +41,33 @@
 **Decision:** `Job.history` records every state change (`from`, `to`, ISO timestamp, optional note), and `transitionJob()` returns a new Job instead of mutating.
 **Why:** An audit trail is cheap now and load-bearing later (widget thread view, debugging failed patches); purity keeps the type package storage-agnostic so the API layer decides persistence. Alternative — a mutable class — would couple consumers to an instance lifecycle.
 **Context:** `packages/types/src/job.ts`.
+
+## 2026-07-10 — @patchback/github is a zero-dependency fetch client, not octokit
+
+**Decision:** Token mode calls the GitHub REST API directly with the global `fetch` (Node 20+), injectable via `TokenClientOptions.fetch`; no octokit or other HTTP/SDK dependency.
+**Why:** The surface is five endpoints — octokit would add a dependency tree to the most security-sensitive package for no leverage. Injectable fetch makes unit tests trivial (no `vi.stubGlobal`, no nock). Octokit remains the fallback if the surface ever grows pagination/rate-limit complexity.
+**Context:** `packages/github/src/token-client.ts`; BUILD_PLAN Phase 3; CLAUDE.md "minimal, established dependencies".
+
+## 2026-07-10 — commitFiles uses the git data API; one call, one commit, no force
+
+**Decision:** `commitFiles` builds ref → parent commit → tree (`base_tree` + inline `content`, `sha: null` for deletes) → commit → non-force ref PATCH, instead of the per-file contents API.
+**Why:** The agent pipeline commits multi-file changes; the contents API is one commit per file and can't delete in the same commit. A single atomic commit keeps PR history readable and the non-force ref update fails loudly if the branch moved underneath us.
+**Context:** `packages/github/src/token-client.ts` (`commitFiles`).
+
+## 2026-07-10 — No merge capability on the GitHubClient surface
+
+**Decision:** The `GitHubClient` interface has exactly `createIssue`, `createBranch`, `commitFiles`, `openPullRequest`, `getPullRequestStatus` — no merge method, and a unit test asserts no `*merge*` member ever appears on the token client.
+**Why:** "No auto-merge, ever" is a product rule (CLAUDE.md #1); the cheapest enforcement is for the capability to not exist at the integration layer at all, so no later phase can reach it by accident or config.
+**Context:** `packages/github/src/types.ts`; `packages/github/src/index.test.ts`.
+
+## 2026-07-10 — App mode is a throwing stub; integration test env-gated and self-cleaning
+
+**Decision:** `createAppClient()` type-checks `GitHubAppConfig` but always throws `GitHubAppModeNotImplementedError` (Phase 10 roadmap). The integration round-trip is gated with `describe.skipIf` on `GITHUB_TOKEN` + `PATCHBACK_TEST_REPO`, closes/deletes everything it creates in `afterAll`, and nothing in the suite factory throws at collection time when credentials are absent.
+**Why:** Later phases can code against one `GitHubClient` interface today without App-mode plumbing. Env-gating keeps CI and stranger clones green with zero credentials (verified skipped this session — no creds configured); self-cleanup keeps the scratch repo reusable.
+**Context:** `packages/github/src/app-client.ts`; `packages/github/src/integration.test.ts`; owner call: "Env-gate it — no credentials now".
+
+## 2026-07-10 — @patchback/github does not depend on @patchback/types
+
+**Decision:** No workspace dependency from `packages/github` to `packages/types` was added in Phase 3.
+**Why:** Nothing from the shared contract is consumed at this layer — the client speaks GitHub nouns (issues, refs, trees, PRs), not Patchback nouns. Mapping FeedbackItem/Job → issue/branch/PR belongs to the orchestrating phases (4/6/8); an unused dependency would only invite layering drift.
+**Context:** `packages/github/package.json`; task guidance said "where relevant" — it wasn't.
