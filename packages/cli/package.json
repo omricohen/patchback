@@ -1,0 +1,22 @@
+{
+  "name": "patchback",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Patchback CLI, including npx patchback dev",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "bin": {
+    "patchback": "./dist/index.js"
+  }
+}

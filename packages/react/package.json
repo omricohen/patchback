@@ -1,0 +1,19 @@
+{
+  "name": "@patchback/react",
+  "version": "0.0.1",
+  "private": true,
+  "description": "React wrapper and hooks for the Patchback widget",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  }
+}
