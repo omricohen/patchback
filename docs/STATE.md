@@ -4,76 +4,91 @@ _Last updated: 2026-07-10_
 
 ## Current phase
 
-**Phase 4 (Agent core + Claude Code adapter) — DONE** on branch
-`phase-4-agent-core` (not merged, not pushed — Omri's call). Phase 2
-(extraction pass) is still pending Omri dropping source material into
-`extraction-inbox/`. Next up: **Phase 5 — Triage**.
+**Phase 5 (Triage classifier + evals) — CODE DONE** on branch
+`phase-5-triage` (not merged, not pushed — Omri's call). One item
+outstanding before the phase can be called fully verified: the live eval
+run (needs `ANTHROPIC_API_KEY`; see below). Phase 2 (extraction pass) is
+still pending Omri dropping source material into `extraction-inbox/`.
+Next up: **Phase 6 — API + orchestration**.
 
-## What's done
+## What's done (Phase 5)
 
-- Phases 0–1 and 3 merged to `main` (scaffold; types + state machine; GitHub
-  token client).
-- `packages/agent-core` (vendor-neutral — a test asserts no vendor SDK/CLI in
-  its deps):
-  - `adapter.ts` — `AgentAdapter` interface (`prepare`, `plan`, `execute`,
-    `summarize`), `AgentContext`, `AgentPlan`, `ExecutionResult` (failure is
-    data: `success: false` + useful `error`, not a throw), `AgentSummary`.
-  - `brief.ts` — `TaskBrief` (title, description, constraints, fileHints,
-    acceptanceCriteria, feedbackId). TRUST BOUNDARY lives here:
-    `assertBriefSourceAllowed(tier)` throws for `outsider`; docs forbid
-    outsider content in any brief field.
-  - `scratch-dir.ts` — `~/.patchback/jobs/<id>` lifecycle; `withScratchDir`
-    guarantees cleanup in `finally` (success, failure, or throw); base dir
-    injectable for tests; job ids validated against path traversal.
-  - `repo-reader.ts` — `readRepoConventions`: package manager from lockfiles
-    → `packageManager` field → npm; scripts; README/CONTRIBUTING/AGENTS.md
-    (CLAUDE.md fallback) truncated to 8k chars each.
-  - `check-runner.ts` — `detectChecks` (lint/typecheck/test incl. aliases,
-    skips the npm placeholder test script) + `runChecks` via the repo's own
-    package manager; structured pass/fail with output tails and timeouts.
-  - `process.ts` — shared `runProcess`: detached process-group SIGKILL on
-    timeout (grandchild-safe), stdin input, stdout/stderr/combined capture.
-  - `git.ts` — clone/branch/numstat plumbing; `diffNumstat` counts untracked
-    files via `git add --intent-to-add`; binary files flagged, 0 lines.
-- `packages/agent-claude-code` (default adapter, `createClaudeCodeAdapter`):
-  - Spawns the CLI headless (`claude -p --output-format json
---permission-mode acceptEdits` by default), prompt on stdin, built from
-    the brief + conventions with the ceiling and "no git commits" rules.
-  - Diff ceiling: `maxChangedLines` default 300; over-ceiling fails with a
-    message pointing back at triage. Zero-change runs fail too. Diff is the
-    source of truth over the CLI's self-reported JSON.
-  - `binaryPath`/`binaryArgs` injectable → unit tests run a fake CLI
-    (`test/fixtures/fake-claude.mjs`, scenario-driven via FAKE_CLAUDE_MODE:
-    label-change, huge-diff, no-op, garbage, cli-error, crash, hang).
-  - Acceptance test (`src/pipeline.test.ts`): temp fixture repo (git init,
-    button label, real lint/test scripts, npm lockfile) → clone into scratch
-    dir → branch `patchback/<jobId>` → prepare/plan/execute/summarize →
-    checks green, minimal 1-file +1/-1 diff verified, scratch dir gone after,
-    including on mid-job failure.
-  - Real-binary e2e in `src/e2e.test.ts` behind `PATCHBACK_E2E_CLAUDE=1`
-    (optionally `PATCHBACK_E2E_CLAUDE_BIN`); verified cleanly skipped this
-    session — no real CLI run was executed.
-- Gate green: `pnpm lint && pnpm test && pnpm build` and `pnpm format:check`.
+- `packages/triage` — classifier per the approved plan
+  (`.a5c/runs/01KX6GMZ9TJBCR1RH3CCNMM77E/artifacts/phase-5-plan.md`):
+  - `model.ts` — vendor-neutral `ModelCaller` seam + `TriageModelError`
+    (transport errors throw; they never become classifications).
+  - `anthropic.ts` — the ONLY file importing `@anthropic-ai/sdk`
+    (approved dep). Default model `claude-opus-4-8` (configurable),
+    adaptive thinking, `output_config` low effort + json_schema
+    structured output, SDK retries; errors mapped via testable
+    `toTriageModelError`.
+  - `prompt.ts` — frozen system prompt (classify-down + injection rules);
+    user message wraps all submitter content in per-call nonce DATA
+    blocks with tag-shape sanitization; caps per field; console capped
+    at last 5 entries; trust tier stated outside blocks; screenshot
+    never serialized.
+  - `schema.ts` — output schema + validation: unparseable/unknown-enum/
+    non-object output → failsafe `needs_human`/confidence 0; confidence
+    clamped to [0,1].
+  - `threshold.ts` — one-step demotion ladder at configurable 0.7
+    (strict `<`): patchable→needs_clarification (question preserved or
+    deterministic fallback), needs_clarification→needs_human (question
+    dropped), needs_human floor; demotions annotated in reasoning.
+  - `classifier.ts` — `triageFeedback(item, {callModel, ...})`; OUTSIDER
+    SHORT-CIRCUIT: outsider items return deterministic `needs_human`
+    with ZERO model invocations (unit-tested guarantee).
+  - 53 unit tests across 5 files, scripted fake ModelCallers (no
+    vi.mock, no network): prompt containment (feedback never in the
+    system prompt), delimiter escape, failsafe, ladder, short-circuit,
+    error mapping.
+- `packages/triage/evals/` — 30 labeled generic fixtures (typo/copy/
+  default/sort/confusing/under-specified/feature/redesign/bug/
+  borderline + 6 injection vectors incl. console- and element-smuggled
+  instructions); `score.ts` (accuracy, per-tag, misses, gate);
+  `eval.test.ts` env-gated on `ANTHROPIC_API_KEY` with TWO assertions —
+  accuracy ≥ 90% AND the absolute injection gate (any `mustNotBe`
+  violation fails the run regardless of score). Verified to SKIP
+  cleanly keyless this session.
+- `packages/agent-core` — structural trust-tier guard (resolves the
+  OPEN_ISSUES advisory): branded `GuardedTaskBrief` (unique symbol; not
+  object-literal-constructible), `createBriefFromTriagedFeedback`
+  enforcing eligible tier AND patchable classification, stamping
+  `feedbackId` + `sourceTier`; `AgentContext.brief` now requires the
+  branded type. `agent-claude-code` fixtures build their brief through
+  the factory (and the package gained a @patchback/types dep).
+- Gate green keyless: `pnpm lint && pnpm test && pnpm build` and
+  `pnpm format:check` (evals + github integration + claude e2e all
+  skip cleanly).
 
 ## Next concrete step
 
-Phase 5 (`packages/triage`): classifier + `evals/` fixture set (~30 labeled,
-incl. injection fixtures that must classify `needs_human`). Still outstanding
-from earlier: run the GitHub integration round-trip once credentials exist;
-Phase 2 extraction pass when material lands.
+1. **Run the live evals once** (Omri, needs a key):
+   `ANTHROPIC_API_KEY=... pnpm --filter @patchback/triage test`
+   — record accuracy + per-tag numbers here; tune system prompt /
+   threshold if under 90% or if any injection fixture leaks. Cost is
+   well under $1/run. `PATCHBACK_EVAL_RUNS=3` for a stability check.
+2. Merge decision on `phase-4-agent-core` (already merged to main
+   earlier) housekeeping: delete stale branch if desired; then review +
+   merge `phase-5-triage`.
+3. Phase 6: API + orchestration — wire `triageFeedback` into the
+   feedback intake path and `createBriefFromTriagedFeedback` into the
+   job runner; server-side tier middleware remains the primary
+   enforcement. Open design questions flagged in the plan: no
+   `needs_human` edge in the job state machine; re-triage after a
+   clarification reply is undefined.
 
 ## Context to pick up cleanly
 
-- Phase 4 decisions in `.claude/DECISIONS.md`: diff-as-ground-truth; 300-line
-  ceiling fails toward triage (never "retry bigger"); trust boundary guard on
-  TaskBrief (agent-core depends on @patchback/types); deterministic `plan()`;
-  shared `runProcess` with process-group kills (the naive kill hung on npm
-  grandchildren).
-- Orchestration wiring (clone → branch → adapter → checks → commit via
-  @patchback/github → PR) is demonstrated in `pipeline.test.ts` but the real
-  worker/queue wiring is Phase 6/8 territory — nothing imports @patchback/github
-  yet from the agent packages, by design.
-- `phase-3-github` branch still exists (already merged to main);
-  `phase-4-agent-core` is unmerged and unpushed.
-- Open issues: `.claude/OPEN_ISSUES.md` (SPEC.md provisional; gitleaks not
-  installed; no GitHub remote yet; Phase 2 pending).
+- Phase 5 decisions in `.claude/DECISIONS.md` (six entries dated
+  2026-07-10): ModelCaller seam + SDK confinement; outsider
+  short-circuit; failsafe + demotion ladder; injection posture;
+  branded brief factory (supersedes the Phase 4 runtime-guard-only
+  decision); env-gated eval runner with acceptable-set grading.
+- The triage core never reads env vars — `ANTHROPIC_API_KEY` is read
+  only inside `createAnthropicModelCaller` (the CLI/API will own config
+  in later phases).
+- `triageFeedback` is side-effect-free: it starts no jobs and builds no
+  briefs. Only the Phase 6 orchestrator may act on `patchable`, and
+  only through the guarded factory.
+- Open issues: `.claude/OPEN_ISSUES.md` (SPEC.md provisional; gitleaks
+  not installed; no GitHub remote; live eval run pending).
