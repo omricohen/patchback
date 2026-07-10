@@ -1,4 +1,4 @@
-import type { TaskBrief } from './brief.js';
+import type { GuardedTaskBrief } from './brief.js';
 import type { RepoConventions } from './repo-reader.js';
 
 /**
@@ -10,7 +10,13 @@ import type { RepoConventions } from './repo-reader.js';
 export interface AgentContext {
   /** Patchback job id this run belongs to. */
   jobId: string;
-  brief: TaskBrief;
+  /**
+   * Trust boundary: only a {@link GuardedTaskBrief} is accepted — briefs are
+   * constructible solely via `createBriefFromTriagedFeedback`, which enforces
+   * the tier + triage preconditions. An unguarded object literal here is a
+   * type error by design.
+   */
+  brief: GuardedTaskBrief;
   /**
    * Absolute path to the working copy of the target repo inside the job's
    * scratch dir. Must be a git work tree on the job's working branch.

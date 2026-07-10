@@ -2,7 +2,12 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { runGit, type TaskBrief } from '@patchback/agent-core';
+import {
+  createBriefFromTriagedFeedback,
+  runGit,
+  type GuardedTaskBrief,
+} from '@patchback/agent-core';
+import type { FeedbackItem } from '@patchback/types';
 
 /**
  * Test fixtures for the adapter suites: a tiny local "target repo" with a
@@ -89,9 +94,30 @@ export async function createFixtureRepo(dir: string): Promise<void> {
   await runGit(dir, ['commit', '--quiet', '-m', 'init fixture app']);
 }
 
-/** The canonical acceptance brief: change button label OLD_LABEL → NEW_LABEL. */
-export function labelChangeBrief(): TaskBrief {
+/** Triaged-patchable insider feedback the acceptance brief derives from. */
+export function labelChangeFeedback(): FeedbackItem {
   return {
+    id: 'feedback-fixture-1',
+    message: `The primary button says "${OLD_LABEL}" but should say "${NEW_LABEL}".`,
+    trustTier: 'insider',
+    triage: {
+      classification: 'patchable',
+      confidence: 0.95,
+      reasoning: 'Unambiguous one-line label change.',
+      triagedAt: '2026-07-10T00:00:00.000Z',
+    },
+    createdAt: '2026-07-10T00:00:00.000Z',
+    updatedAt: '2026-07-10T00:00:00.000Z',
+  };
+}
+
+/**
+ * The canonical acceptance brief: change button label OLD_LABEL → NEW_LABEL.
+ * Built through the guarded factory — the only way to produce a brief an
+ * adapter will accept.
+ */
+export function labelChangeBrief(): GuardedTaskBrief {
+  return createBriefFromTriagedFeedback(labelChangeFeedback(), {
     title: `Change button label "${OLD_LABEL}" to "${NEW_LABEL}"`,
     description:
       `The primary button in ${BUTTON_FILE} currently reads ` +
@@ -102,6 +128,5 @@ export function labelChangeBrief(): TaskBrief {
       `The button label is "${NEW_LABEL}".`,
       'No other behavior changes.',
     ],
-    feedbackId: 'feedback-fixture-1',
-  };
+  });
 }

@@ -17,6 +17,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@patchback/agent-core": "workspace:*"
+    "@patchback/agent-core": "workspace:*",
+    "@patchback/types": "workspace:*"
   }
 }
