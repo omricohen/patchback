@@ -71,3 +71,33 @@
 **Decision:** No workspace dependency from `packages/github` to `packages/types` was added in Phase 3.
 **Why:** Nothing from the shared contract is consumed at this layer — the client speaks GitHub nouns (issues, refs, trees, PRs), not Patchback nouns. Mapping FeedbackItem/Job → issue/branch/PR belongs to the orchestrating phases (4/6/8); an unused dependency would only invite layering drift.
 **Context:** `packages/github/package.json`; task guidance said "where relevant" — it wasn't.
+
+## 2026-07-10 — Adapter success is judged by the git diff, not the CLI's self-report
+
+**Decision:** The Claude Code adapter parses `--output-format json` tolerantly but decides pass/fail from `git diff --numstat` (via `git add --intent-to-add` so untracked files count): zero changed files fails, exceeding the diff ceiling fails, unparsable CLI output with a valid diff still succeeds.
+**Why:** The CLI's self-report can be wrong in both directions (claims success without edits, or emits noise around valid work); the working tree is ground truth and the check-runner validates it independently. Alternative — trusting the JSON `is_error` alone — was kept only as an additional failure signal.
+**Context:** `packages/agent-claude-code/src/adapter.ts` (`execute`), `src/result.ts`.
+
+## 2026-07-10 — Diff ceiling defaults to 300 changed lines and fails toward triage, not retry
+
+**Decision:** `maxChangedLines` (additions + deletions from numstat, binary files counted as 0 lines but still listed) defaults to 300; exceeding it fails the job with a message saying triage likely misclassified the item and it should go to a human — explicitly not "retry with a bigger limit".
+**Why:** BUILD_PLAN Phase 4 rule: a bigger diff means the triage was wrong. Encoding the routing advice in the error keeps later phases (worker, widget thread) honest about what this failure means.
+**Context:** `packages/agent-claude-code/src/adapter.ts`; CLAUDE.md "triage before code".
+
+## 2026-07-10 — Trust boundary enforced at the brief type with a runtime guard
+
+**Decision:** `TaskBrief` (agent-core) is the only instruction channel into adapters; its docs state outsider content must never enter any field, and `assertBriefSourceAllowed(tier)` (backed by `canInitiatePatchJob` from @patchback/types) throws `BriefSourceNotAllowedError` for outsider tiers as defense-in-depth. agent-core thus takes a workspace dep on @patchback/types; agent-claude-code does not.
+**Why:** The server-side tier check (Phase 6) is the primary enforcement, but the type that actually reaches the agent should carry the rule and a guard so no orchestration path can skip it silently.
+**Context:** `packages/agent-core/src/brief.ts`; CLAUDE.md rule #3.
+
+## 2026-07-10 — plan() is deterministic (no model call); the CLI runs only in execute()
+
+**Decision:** The adapter's `plan()` builds an auditable step list locally from the brief instead of spawning the CLI twice; `execute()` is the single agent invocation, with the ceiling and no-git-commit rules embedded in the prompt.
+**Why:** A second model call would double cost/latency for a v0.1 pipeline whose plan is implied by the brief; the AgentAdapter interface keeps `plan()` as a seam where a richer planner can slot in later without changing callers.
+**Context:** `packages/agent-claude-code/src/adapter.ts`; `packages/agent-core/src/adapter.ts` interface docs.
+
+## 2026-07-10 — Adapters spawn processes via a shared agent-core runProcess helper
+
+**Decision:** One `runProcess()` (agent-core) serves both the check-runner and CLI adapters: detached process groups on POSIX so timeout SIGKILL takes down grandchildren, settle-after-exit grace because a surviving grandchild can hold stdio pipes open, stdin input support, and separate stdout/stderr plus combined capture. The adapter binary is injectable (`binaryPath` + `binaryArgs`), which is how tests substitute a fake CLI (node script) for `claude`.
+**Why:** The naive kill left `npm run` grandchildren alive and hung the runner until test timeout (observed in this session); solving it once in agent-core keeps every adapter safe. Injection keeps unit tests hermetic while the real-binary e2e stays env-gated (`PATCHBACK_E2E_CLAUDE=1`, cleanly skipped otherwise).
+**Context:** `packages/agent-core/src/process.ts`; `packages/agent-claude-code/test/fixtures/fake-claude.mjs`.
