@@ -1,0 +1,85 @@
+import type { TaskBrief } from './brief.js';
+import type { RepoConventions } from './repo-reader.js';
+
+/**
+ * Everything an adapter needs to do its work. Constructed by the orchestrator
+ * (local runner / worker), passed through all four lifecycle methods of one
+ * job. The same object identity flows through prepare → plan → execute →
+ * summarize, so adapters may key internal per-job state off it.
+ */
+export interface AgentContext {
+  /** Patchback job id this run belongs to. */
+  jobId: string;
+  brief: TaskBrief;
+  /**
+   * Absolute path to the working copy of the target repo inside the job's
+   * scratch dir. Must be a git work tree on the job's working branch.
+   */
+  workDir: string;
+  /**
+   * Target-repo conventions. Usually filled in by `prepare()` (via
+   * `readRepoConventions`); orchestrators may pre-populate it.
+   */
+  conventions?: RepoConventions;
+}
+
+/** Result of `plan()`: what the adapter intends to do, for logs/audit trail. */
+export interface AgentPlan {
+  steps: string[];
+  notes?: string;
+}
+
+/** One changed file as reported by `git diff --numstat`. */
+export interface ChangedFile {
+  path: string;
+  /** Lines added; 0 for binary files (git reports `-`). */
+  additions: number;
+  /** Lines deleted; 0 for binary files (git reports `-`). */
+  deletions: number;
+  binary: boolean;
+}
+
+/**
+ * Result of `execute()`. A failed execution reports `success: false` with a
+ * human-useful `error` — it does not throw, so orchestrators can move the job
+ * to `patch.failed` with the message intact.
+ */
+export interface ExecutionResult {
+  success: boolean;
+  changedFiles: ChangedFile[];
+  /** Total added + deleted lines across all changed files. */
+  totalChangedLines: number;
+  /** Tail of the agent's raw output, for logs. */
+  agentOutput?: string;
+  /** Present when `success` is false. */
+  error?: string;
+}
+
+/** Result of `summarize()`: feeds the PR title/body. */
+export interface AgentSummary {
+  title: string;
+  body: string;
+}
+
+/**
+ * The vendor-neutral agent adapter contract.
+ *
+ * `@patchback/agent-core` never imports a specific vendor SDK or CLI —
+ * adapters (e.g. `@patchback/agent-claude-code`) implement this interface and
+ * are plugged in by the orchestrator. Lifecycle, in order, for one job:
+ *
+ * 1. `prepare`   — validate the working copy, read conventions, warm caches.
+ * 2. `plan`      — produce an auditable plan from the brief (no code changes).
+ * 3. `execute`   — make the change in `ctx.workDir`; leave the working tree
+ *                  dirty (no commits — committing/branch push is the
+ *                  orchestrator's job via `@patchback/github`).
+ * 4. `summarize` — produce the PR title/body from what actually happened.
+ */
+export interface AgentAdapter {
+  /** Stable adapter identifier, e.g. `claude-code`. */
+  readonly name: string;
+  prepare(ctx: AgentContext): Promise<void>;
+  plan(ctx: AgentContext): Promise<AgentPlan>;
+  execute(ctx: AgentContext): Promise<ExecutionResult>;
+  summarize(ctx: AgentContext): Promise<AgentSummary>;
+}

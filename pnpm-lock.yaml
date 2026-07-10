@@ -38,9 +38,17 @@ importers:
 
   apps/widget-playground: {}
 
-  packages/agent-claude-code: {}
+  packages/agent-claude-code:
+    dependencies:
+      '@patchback/agent-core':
+        specifier: workspace:*
+        version: link:../agent-core
 
-  packages/agent-core: {}
+  packages/agent-core:
+    dependencies:
+      '@patchback/types':
+        specifier: workspace:*
+        version: link:../types
 
   packages/api: {}
 
