@@ -90,9 +90,7 @@ export function createAnthropicModelCaller(
         messages: [{ role: 'user', content: request.user }],
       });
       const text = response.content
-        .filter(
-          (block): block is Anthropic.TextBlock => block.type === 'text',
-        )
+        .filter((block): block is Anthropic.TextBlock => block.type === 'text')
         .map((block) => block.text)
         .join('');
       return { text };

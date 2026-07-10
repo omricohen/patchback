@@ -134,9 +134,7 @@ describe('buildUserMessage', () => {
     const { text, nonce } = buildUserMessage(item({ message: long }));
     const content = blocks(text, nonce).get('message') ?? '';
     expect(content).toContain(TRUNCATION_MARKER);
-    expect(content.length).toBe(
-      PROMPT_CAPS.message + TRUNCATION_MARKER.length,
-    );
+    expect(content.length).toBe(PROMPT_CAPS.message + TRUNCATION_MARKER.length);
   });
 
   it('includes only the last N console entries', () => {
@@ -156,7 +154,10 @@ describe('buildUserMessage', () => {
     const { text } = buildUserMessage(
       item({
         capture: {
-          screenshot: { dataUri: 'data:image/png;base64,SENTINEL', masked: true },
+          screenshot: {
+            dataUri: 'data:image/png;base64,SENTINEL',
+            masked: true,
+          },
           url: 'https://app.example.com',
         },
       }),

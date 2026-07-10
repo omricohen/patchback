@@ -117,7 +117,9 @@ export function buildUserMessage(item: FeedbackItem): BuiltPrompt {
   }
   if (capture?.element) {
     const element = capture.element;
-    const lines = [`domPath: ${truncate(element.domPath, PROMPT_CAPS.domPath)}`];
+    const lines = [
+      `domPath: ${truncate(element.domPath, PROMPT_CAPS.domPath)}`,
+    ];
     if (element.tagName) {
       lines.push(`tagName: ${truncate(element.tagName, PROMPT_CAPS.tagName)}`);
     }
