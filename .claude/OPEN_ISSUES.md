@@ -8,6 +8,10 @@
 
 - **[2026-07-10] Triage evals not yet run against a live model** — the Phase 5 eval suite (30 fixtures, ≥90% bar + absolute injection gate, `packages/triage/evals/`) is env-gated behind `ANTHROPIC_API_KEY` and verified to skip cleanly, but no live run has happened (no key in this session). Omri: run `ANTHROPIC_API_KEY=... pnpm --filter @patchback/triage test` once and record the numbers in docs/STATE.md; tune the system prompt / threshold if below the bar.
 
+- **[2026-07-13] PR closed-without-merge is unrepresentable in the canonical machine** — `pull_request` closed with `merged: false` changes no job state (the webhook returns 202 and the job rests at `pr.opened`/`pr.reviewed`); notes ride on transitions only, so nothing can even be recorded on the job. Deliberate: no non-canonical edge was invented (CLAUDE.md "use exactly these"). Needs an owner-approved canonical-machine revision (e.g. a `pr.closed` terminal state) in a future phase. Lives in `packages/api/src/routes/webhooks.ts`.
+- **[2026-07-13] Default patch pipeline's end-to-end path untested against real GitHub + agent** — `createDefaultPatchPipeline` is covered by local tests (temp git repo, fake adapter/client) and the seam is fake-driven in the acceptance suite, but no run with the real Claude Code adapter + a real repo has happened (same posture as the Phase 4 e2e: env-gated pieces exist per package, the composed run arrives with the Phase 8 CLI).
+- **[2026-07-13] Feedback GET returns capture context to read-token holders unredacted** — decided non-blocking in the phase-6 plan (the token holder submitted the capture), but revisit when the widget ships if tokens get shared beyond the submitter.
+
 ## Resolved
 
 - **[2026-07-10 → 2026-07-10] Brief trust-tier guard not yet structural** — resolved in Phase 5 via the guarded-factory option: `GuardedTaskBrief` is branded with a unique symbol (not object-literal-constructible); `createBriefFromTriagedFeedback` is the only producer and enforces `canInitiatePatchJob(tier)` AND `triage.classification === 'patchable'`, stamping `feedbackId` + `sourceTier`; `AgentContext.brief` now requires the branded type.

@@ -137,3 +137,51 @@
 **Decision:** `evals/eval.test.ts` uses `describe.skipIf(!process.env.ANTHROPIC_API_KEY)` (repo precedent: github integration test, Phase 4 e2e). Fixtures carry an `expected` array (acceptable set — used for two genuinely borderline items) plus an optional `mustNotBe` absolute gate; scoring reports accuracy, per-tag breakdown, and misses. Concurrency capped at 4; `PATCHBACK_EVAL_RUNS=n` for repeatability checks. Verified to skip cleanly keyless this session; a live run awaits a key (logged in OPEN_ISSUES).
 **Why:** CI and stranger clones stay green with zero credentials; borderline items should test the classify-down policy, not luck.
 **Context:** `packages/triage/evals/{eval.test.ts,score.ts,fixtures/fixtures.json}`.
+
+## 2026-07-13 — Trust tiers assigned exclusively server-side from a config API-key map
+
+**Decision:** `ApiConfig.apiKeys` maps bearer keys → `owner` | `insider` (an "outsider key" is unrepresentable in the type and rejected by `validateConfig`); no/unknown/malformed key resolves to `outsider` (fail closed, not 401 — anonymous submission is a feature). The POST /feedback body schema has `additionalProperties: false` and no `trustTier` property, and ajv's default `removeAdditional` is turned OFF, so a client-supplied tier is a loud 400. Key comparison is constant-time (hash-then-timingSafeEqual); keys never appear in logs or responses. Every tier read back from storage/config re-passes `isTrustTier` and fails closed with `StoreIntegrityError` (closes the Phase 5 carry-over: the tier is revalidated before it reaches the triage prompt path).
+**Why:** The trust tier is a security boundary; the only party that may assign it is the server, from configuration the operator controls. Rejecting (not stripping) a body-supplied tier prevents anyone building against the false assumption that clients pick tiers.
+**Context:** `packages/api/src/{auth,config,trust}.ts`, `src/routes/feedback.ts`; approved phase-6 plan §3.
+
+## 2026-07-13 — Per-item read tokens (hashed at rest) gate feedback/job reads
+
+**Decision:** `POST /feedback` returns a one-time 32-byte base64url `readToken`; only its SHA-256 hash is stored. `GET /feedback/:id`, `GET /jobs/:id/status`, and `POST /feedback/:id/reply` require the item's token or an owner/insider key; failures are 404 (not 401) so probing can't distinguish existence. Rejected alternative: unguessable-ID-as-capability — IDs land in URLs and logs by design and would leak captured context (console errors, DOM paths).
+**Why:** Cheap now; the Phase 7 widget just stores the token next to the id.
+**Context:** `packages/api/src/ids.ts`, `src/routes/shared.ts`; plan §3.
+
+## 2026-07-13 — Replies are NEW linked FeedbackItems with NEW Jobs; effective tier = thread minimum (fulfils the Phase 1 anticipation)
+
+**Decision:** `feedback.needs_clarification` stays terminal, exactly as the Phase 1 state-machine decision anticipated ("likely as a new Job rather than a resurrected one"). `POST /feedback/:id/reply` (valid only in that state, 409 otherwise) creates a new item linked via additive `threadId` (root id) / `inReplyTo` (parent id) fields and a new job at `feedback.received`. The reply item's stored tier is the MINIMUM across its thread (owner > insider > outsider) — outsider content anywhere poisons every reply, so a trusted replier can never launder an outsider-rooted thread into a triage prompt or a brief. The caller's key tier does not enter the minimum: read access already proves thread membership, and the thread's own provenance decides. Reply triage sees the thread context (prior messages + clarifying question) inside the same nonce-delimited DATA blocks.
+**Why:** Keeps the canonical CLAUDE.md states byte-exact, keeps one job = one triage verdict = at most one PR, and makes the min-tier rule a data-level property rather than a caller-level courtesy. Alternative (a needs_clarification → received re-triage edge) rejected: would amend the canonical machine for no audit benefit.
+**Context:** `packages/types/src/feedback.ts`, `packages/api/src/routes/feedback.ts`, `packages/triage/src/prompt.ts` (ThreadContext); plan §5.
+
+## 2026-07-13 — needs_human is a classification resting at feedback.triaged, not a job state
+
+**Decision:** After triage, `needs_clarification` items advance to the terminal `feedback.needs_clarification`; `patchable` AND `needs_human` items rest at `feedback.triaged`. `needs_human` items are un-startable via the server-side triage gate (`403 triage_gate`), not via a new state. This resolves the STATE.md open question without touching the canonical machine.
+**Why:** Classification lives on the item; the state machine tracks lifecycle, not verdicts.
+**Context:** `packages/api/src/workers/triage-worker.ts`, `src/routes/jobs.ts`; plan §4.
+
+## 2026-07-13 — Storage is a hand-written Store interface: MemoryStore dev default, Drizzle/Postgres prod; SQLite deferred
+
+**Decision:** One `Store` interface with compare-and-swap `updateJob(job, expectedState)` as the concurrency primitive (drizzle: `UPDATE … WHERE state = expected`; duplicate queue deliveries and double-starts lose the CAS instead of corrupting the audit trail). MemoryStore (zero deps, deep-copy in/out, same fail-closed validation) is the dev/test default; DrizzleStore + committed drizzle-kit migrations (CHECK constraints over the three tiers and twelve canonical states) is prod; `pg` is imported by exactly one file. SQLite is NOT in Phase 6: better-sqlite3 is a native build step (violates the no-install spirit) and `node:sqlite` needs Node 22.5+ (engines say >=20). Revisit condition: if `patchback dev` needs persistence across restarts in Phase 8, a drizzle sqlite-core store slots in behind the same interface. Row → domain mapping revalidates tier/state/triage jsonb and throws `StoreIntegrityError` — never coerced toward a runnable state or an eligible tier.
+**Why:** The interface is five queries; an ORM-agnostic seam keeps `npx patchback dev` at zero services while prod gets real CAS semantics.
+**Context:** `packages/api/src/store/`; one conformance suite parameterized over both drivers, Drizzle env-gated behind `PATCHBACK_TEST_DATABASE_URL` (verified green against a live Postgres 17 this session).
+
+## 2026-07-13 — Queue is a minimal TaskQueue; memory dev default; bullmq confined to one file; patch tasks never auto-retry
+
+**Decision:** `TaskQueue` = enqueue / process / close over two task types (`triage {feedbackId, jobId}`, `patch {jobId}` — the triage payload carries the jobId, a deliberate convenience over the plan's sketch). Retry policy is per task type and shared by both drivers via `maxAttemptsForTask`: triage 3 attempts (transport `TriageModelError`s throw and retry; exhausted retries leave the job at `feedback.received`, never a fabricated classification), patch exactly 1 (the worker records `patch.failed` itself; the queue re-running an agent would burn money and hide failures). MemoryQueue is single-consumer FIFO with `onIdle()` so tests await drains instead of sleeping; BullMQQueue is the only file importing bullmq, parses the Redis URL without importing ioredis, env-gated test behind `PATCHBACK_TEST_REDIS_URL` (verified green against a live Redis this session).
+**Why:** Local-first structurally: memory drivers are the defaults, services activate only when explicitly configured.
+**Context:** `packages/api/src/queue/`; plan §7.
+
+## 2026-07-13 — Webhook route exists only with a secret; handler wired without a GitHubClient
+
+**Decision:** `POST /webhooks/github` is registered ONLY when `webhookSecret` is configured — there is no "verification disabled" mode, because an unverified webhook endpoint is an unauthenticated state-transition API. Verification is HMAC SHA-256 over the RAW request bytes (scoped buffer content-type parser, hash-then-timingSafeEqual) before any JSON parsing. The handler receives a Store and a plain `RepoRef` value — NOT the GitHubClient — so outbound GitHub calls (let alone a merge) are impossible by wiring, on top of GitHubClient having no merge method (Phase 3) and an integration spy asserting zero client calls during webhook processing. Merged PRs walk `pr.opened → pr.reviewed → patch.shipped → feedback.closed` through `transitionJob` (merge by a human implies review); closed-without-merge changes nothing (see OPEN_ISSUES).
+**Why:** No-auto-merge is enforced at three independent layers; PR status flows in only.
+**Context:** `packages/api/src/routes/webhooks.ts`, `src/webhook-verify.ts`; plan §8.
+
+## 2026-07-13 — Repo-wide typecheck task covers test files and evals (closes the dead @ts-expect-error gap)
+
+**Decision:** Every package gets `tsconfig.typecheck.json` (extends the package tsconfig, `noEmit`, `rootDir: "."`, includes `src`/`test`/`evals`, empty exclude) and a `typecheck` script; turbo gains a `typecheck` task (`dependsOn ^build`), the root gains `pnpm typecheck`, and CI runs it between lint and test. Verified live: temporarily deleting the GuardedTaskBrief brand makes `pnpm typecheck` fail with TS2578 in agent-core. The check also surfaced and fixed a latent expect-type misuse in agent-claude-code.
+**Why:** Package tsconfigs exclude tests from builds and vitest transpiles without typechecking, so every `@ts-expect-error` security assertion was dead until now — and Phase 6 is where a brand regression becomes reachable from network input.
+**Context:** `*/tsconfig.typecheck.json`, `turbo.json`, `.github/workflows/ci.yml`; plan §10.
