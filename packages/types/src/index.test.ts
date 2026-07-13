@@ -110,4 +110,18 @@ describe('shared shapes compile and compose', () => {
     expect(item.capture).toBeUndefined();
     expect(canInitiatePatchJob(item.trustTier)).toBe(false);
   });
+
+  it('a clarification reply links to its thread via threadId/inReplyTo', () => {
+    const reply: FeedbackItem = {
+      id: 'fb_3',
+      message: 'The label I meant is the one on the submit button.',
+      trustTier: 'insider',
+      threadId: 'fb_2',
+      inReplyTo: 'fb_2',
+      createdAt: '2026-07-10T00:00:02.000Z',
+      updatedAt: '2026-07-10T00:00:02.000Z',
+    };
+    expect(reply.threadId).toBe('fb_2');
+    expect(reply.inReplyTo).toBe('fb_2');
+  });
 });

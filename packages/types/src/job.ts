@@ -121,6 +121,8 @@ export interface Job {
   branchName?: string;
   /** PR number, set once `pr.opened` is reached. */
   prNumber?: number;
+  /** Human-facing PR URL, set once `pr.opened` is reached. */
+  prUrl?: string;
   /** Failure detail, set when the job reaches `patch.failed`. */
   error?: string;
   /** ISO 8601 timestamps. */

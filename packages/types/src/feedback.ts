@@ -26,6 +26,15 @@ export interface FeedbackItem {
   capture?: CaptureContext;
   /** Set once triage has run. */
   triage?: TriageResult;
+  /**
+   * Clarification threading (see the reply model in the API): a reply is a
+   * NEW item linked to its thread — the canonical job state machine is never
+   * resurrected. `threadId` is the ROOT item's id, set on every member of the
+   * thread except the root itself. Root items have neither field.
+   */
+  threadId?: string;
+  /** The id of the item this one replies to (immediate parent). */
+  inReplyTo?: string;
   /** ISO 8601 timestamps. */
   createdAt: string;
   updatedAt: string;
