@@ -12,7 +12,7 @@ describe('@patchback/agent-claude-code surface', () => {
 
   it('implements the vendor-neutral AgentAdapter contract', () => {
     const adapter = createClaudeCodeAdapter();
-    expectTypeOf(adapter).toMatchObjectType<AgentAdapter>();
+    expectTypeOf(adapter).toExtend<AgentAdapter>();
     expect(adapter.name).toBe('claude-code');
     expect(adapter.prepare).toBeTypeOf('function');
     expect(adapter.plan).toBeTypeOf('function');

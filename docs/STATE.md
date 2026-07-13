@@ -1,94 +1,101 @@
 # STATE — where we left off
 
-_Last updated: 2026-07-10_
+_Last updated: 2026-07-13_
 
 ## Current phase
 
-**Phase 5 (Triage classifier + evals) — CODE DONE** on branch
-`phase-5-triage` (not merged, not pushed — Omri's call). One item
-outstanding before the phase can be called fully verified: the live eval
-run (needs `ANTHROPIC_API_KEY`; see below). Phase 2 (extraction pass) is
-still pending Omri dropping source material into `extraction-inbox/`.
-Next up: **Phase 6 — API + orchestration**.
+**Phase 6 (API: Fastify + queue + trust tiers) — CODE DONE** on branch
+`phase-6-api` (not merged, not pushed — Omri's call), implemented per the
+approved plan
+(`.a5c/runs/01KX6GMZ9TJBCR1RH3CCNMM77E/artifacts/phase-6-plan.md`).
+Phase 2 (extraction pass) still pending source material in
+`extraction-inbox/`. Next up: **Phase 7 — Widget + SDK** (or merge/review
+of this branch first).
 
-## What's done (Phase 5)
+## What's done (Phase 6)
 
-- `packages/triage` — classifier per the approved plan
-  (`.a5c/runs/01KX6GMZ9TJBCR1RH3CCNMM77E/artifacts/phase-5-plan.md`):
-  - `model.ts` — vendor-neutral `ModelCaller` seam + `TriageModelError`
-    (transport errors throw; they never become classifications).
-  - `anthropic.ts` — the ONLY file importing `@anthropic-ai/sdk`
-    (approved dep). Default model `claude-opus-4-8` (configurable),
-    adaptive thinking, `output_config` low effort + json_schema
-    structured output, SDK retries; errors mapped via testable
-    `toTriageModelError`.
-  - `prompt.ts` — frozen system prompt (classify-down + injection rules);
-    user message wraps all submitter content in per-call nonce DATA
-    blocks with tag-shape sanitization; caps per field; console capped
-    at last 5 entries; trust tier stated outside blocks; screenshot
-    never serialized.
-  - `schema.ts` — output schema + validation: unparseable/unknown-enum/
-    non-object output → failsafe `needs_human`/confidence 0; confidence
-    clamped to [0,1].
-  - `threshold.ts` — one-step demotion ladder at configurable 0.7
-    (strict `<`): patchable→needs_clarification (question preserved or
-    deterministic fallback), needs_clarification→needs_human (question
-    dropped), needs_human floor; demotions annotated in reasoning.
-  - `classifier.ts` — `triageFeedback(item, {callModel, ...})`; OUTSIDER
-    SHORT-CIRCUIT: outsider items return deterministic `needs_human`
-    with ZERO model invocations (unit-tested guarantee).
-  - 53 unit tests across 5 files, scripted fake ModelCallers (no
-    vi.mock, no network): prompt containment (feedback never in the
-    system prompt), delimiter escape, failsafe, ladder, short-circuit,
-    error mapping.
-- `packages/triage/evals/` — 30 labeled generic fixtures (typo/copy/
-  default/sort/confusing/under-specified/feature/redesign/bug/
-  borderline + 6 injection vectors incl. console- and element-smuggled
-  instructions); `score.ts` (accuracy, per-tag, misses, gate);
-  `eval.test.ts` env-gated on `ANTHROPIC_API_KEY` with TWO assertions —
-  accuracy ≥ 90% AND the absolute injection gate (any `mustNotBe`
-  violation fails the run regardless of score). Verified to SKIP
-  cleanly keyless this session.
-- `packages/agent-core` — structural trust-tier guard (resolves the
-  OPEN_ISSUES advisory): branded `GuardedTaskBrief` (unique symbol; not
-  object-literal-constructible), `createBriefFromTriagedFeedback`
-  enforcing eligible tier AND patchable classification, stamping
-  `feedbackId` + `sourceTier`; `AgentContext.brief` now requires the
-  branded type. `agent-claude-code` fixtures build their brief through
-  the factory (and the package gained a @patchback/types dep).
-- Gate green keyless: `pnpm lint && pnpm test && pnpm build` and
-  `pnpm format:check` (evals + github integration + claude e2e all
-  skip cleanly).
+- `packages/api` — the orchestrator:
+  - `buildServer(config)` (pure over `ApiConfig`, never reads env):
+    POST /feedback, GET /feedback/:id, POST /feedback/:id/reply,
+    POST /jobs/:id/start, GET /jobs/:id/status, POST /webhooks/github.
+  - Server-side tier assignment ONLY: config API-key→tier map
+    (owner/insider; an outsider key is unrepresentable and rejected at
+    startup), no/unknown key ⇒ outsider, constant-time compare,
+    body-supplied `trustTier` ⇒ 400 (ajv `removeAdditional` off).
+  - `POST /jobs/:id/start` enforces caller tier AND stored-item tier
+    (outsider feedback is data only, even for an owner caller — 403
+    `tier_forbidden` with "data only" message), state gate
+    (`feedback.triaged`, 409) and triage gate (`patchable`, 403
+    `triage_gate`). Issue created synchronously; job CAS-advanced
+    `feedback.triaged → issue.created → patch.queued`.
+  - Replies: new linked item (+`threadId`/`inReplyTo`, additive in
+    @patchback/types) + new job; original stays terminal; effective tier =
+    thread minimum; reply triage sees thread context in DATA blocks
+    (`ThreadContext` added to @patchback/triage, containment-tested).
+  - Workers (`createWorkers`): triage worker (outsider short-circuit
+    upstream in triageFeedback; TriageModelError → queue retry;
+    `needs_human` rests at `feedback.triaged`) and patch worker (guarded
+    brief factory is the only brief producer; deterministic brief fields;
+    failure → `patch.failed` with error preserved; never retried).
+  - Storage: `Store` interface + MemoryStore (dev default, zero deps) +
+    DrizzleStore (pg, CAS `UPDATE … WHERE state=expected`, committed
+    migration `packages/api/migrations/0000_init.sql` with tier/state
+    CHECKs). Runtime `isTrustTier`/`isJobState` fail-closed validation at
+    every boundary (config load, auth, deserialization, prompt path) —
+    Phase 5 carry-over item 2 closed.
+  - Queue: `TaskQueue` + MemoryQueue (FIFO, `onIdle()`, triage×3/patch×1
+    retries) + BullMQQueue (only file importing bullmq).
+  - Webhooks: route exists only with `webhookSecret`; raw-body HMAC
+    (timing-safe) before parsing; handler constructed WITHOUT a
+    GitHubClient (spy-asserted zero outbound calls); merged PR walks
+    `pr.opened → pr.reviewed → patch.shipped → feedback.closed`.
+  - PatchPipeline seam + `createDefaultPatchPipeline` (scratch dir →
+    clone → adapter lifecycle → check-runner → branch/commit/PR),
+    locally tested with a temp git repo and fakes.
+- Repo-wide `pnpm typecheck` covering tests/evals (turbo task + CI step);
+  the GuardedTaskBrief `@ts-expect-error` brand test is now live
+  (verified TS2578 fires if the brand is removed) — carry-over item 1
+  closed. Fixed a latent expect-type misuse it caught in
+  agent-claude-code.
+- Tests: 100+ across the api package — unit (auth, config, webhook
+  verify, tier min, row-mapping corruption), store conformance
+  (parameterized; Drizzle env-gated `PATCHBACK_TEST_DATABASE_URL`),
+  queue (BullMQ env-gated `PATCHBACK_TEST_REDIS_URL`), pipeline, routes
+  (full start-gate matrix), and `test/integration.test.ts` — the phase
+  acceptance: happy path through the exact canonical history, outsider
+  rejection (zero model calls proof + owner-key 403), clarification
+  loop, webhook auth, no-merge spy, patch-failure path.
+- Env-gated suites verified GREEN this session against ephemeral local
+  Postgres 17 + Redis (then torn down); they skip cleanly keyless.
+- Gate green: `pnpm lint && pnpm typecheck && pnpm test && pnpm build`
+  and `pnpm format:check`, zero credentials/services.
 
 ## Next concrete step
 
-1. **Run the live evals once** (Omri, needs a key):
-   `ANTHROPIC_API_KEY=... pnpm --filter @patchback/triage test`
-   — record accuracy + per-tag numbers here; tune system prompt /
-   threshold if under 90% or if any injection fixture leaks. Cost is
-   well under $1/run. `PATCHBACK_EVAL_RUNS=3` for a stability check.
-2. Merge decision on `phase-4-agent-core` (already merged to main
-   earlier) housekeeping: delete stale branch if desired; then review +
-   merge `phase-5-triage`.
-3. Phase 6: API + orchestration — wire `triageFeedback` into the
-   feedback intake path and `createBriefFromTriagedFeedback` into the
-   job runner; server-side tier middleware remains the primary
-   enforcement. Open design questions flagged in the plan: no
-   `needs_human` edge in the job state machine; re-triage after a
-   clarification reply is undefined.
+1. Review + merge `phase-6-api` (6 commits).
+2. Run the live triage evals once (still pending from Phase 5, needs
+   `ANTHROPIC_API_KEY`).
+3. Phase 7 — Widget + SDK: the widget consumes
+   `{id, jobId, readToken}` from POST /feedback, polls
+   GET /jobs/:id/status (canonical states, presentation mapping is the
+   widget's job), thread view from GET /feedback/:id, replies via
+   POST /feedback/:id/reply.
 
 ## Context to pick up cleanly
 
-- Phase 5 decisions in `.claude/DECISIONS.md` (six entries dated
-  2026-07-10): ModelCaller seam + SDK confinement; outsider
-  short-circuit; failsafe + demotion ladder; injection posture;
-  branded brief factory (supersedes the Phase 4 runtime-guard-only
-  decision); env-gated eval runner with acceptable-set grading.
-- The triage core never reads env vars — `ANTHROPIC_API_KEY` is read
-  only inside `createAnthropicModelCaller` (the CLI/API will own config
-  in later phases).
-- `triageFeedback` is side-effect-free: it starts no jobs and builds no
-  briefs. Only the Phase 6 orchestrator may act on `patchable`, and
-  only through the guarded factory.
-- Open issues: `.claude/OPEN_ISSUES.md` (SPEC.md provisional; gitleaks
-  not installed; no GitHub remote; live eval run pending).
+- Phase 6 decisions in `.claude/DECISIONS.md` (eight entries dated
+  2026-07-13): server-side tier map; read tokens; reply/thread model with
+  min-tier; needs_human-as-classification; storage split (SQLite
+  deferred with revisit condition); queue semantics (patch never
+  auto-retried); webhook posture (no client in handler); repo-wide
+  typecheck.
+- New OPEN_ISSUES: PR closed-without-merge unrepresentable (needs an
+  owner-approved canonical-machine revision someday); default pipeline
+  not yet run against real GitHub + agent (Phase 8 CLI composes it);
+  capture context unredacted for read-token holders (accepted for now).
+- PR-status POLLING for local dev (webhooks can't reach localhost) is
+  deferred to Phase 8 per the plan — the store-updating pieces exist;
+  no poll loop shipped.
+- The api package never reads `process.env`; the CLI (Phase 8) owns
+  config loading and supplies the concrete agent adapter
+  (`ApiConfig.adapter` + `repoSource`, or a prebuilt `pipeline`).

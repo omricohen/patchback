@@ -1,2 +1,45 @@
-// Placeholder — implemented in its build-plan phase. See docs/BUILD_PLAN.md.
-export const PACKAGE_NAME = '@patchback/api';
+/**
+ * @patchback/api — the orchestrator: Fastify routes, queue workers, and
+ * server-side trust-tier enforcement.
+ *
+ * Local-first by default: the memory Store/TaskQueue drivers exported here
+ * need zero services. The Postgres (drizzle) and Redis (bullmq) drivers live
+ * behind subpath exports (`@patchback/api/drizzle`, `@patchback/api/bullmq`)
+ * so importing this entry point never loads a database or queue client.
+ */
+export { buildServer } from './server.js';
+export { createWorkers } from './workers/index.js';
+export {
+  ConfigError,
+  resolvePipeline,
+  validateConfig,
+  type ApiConfig,
+  type ApiKeyEntry,
+} from './config.js';
+export { resolveAuth, type RequestAuth } from './auth.js';
+export {
+  API_ERROR_CODES,
+  ApiError,
+  StoreIntegrityError,
+  type ApiErrorCode,
+} from './errors.js';
+export type { Store } from './store/store.js';
+export { MemoryStore } from './store/memory.js';
+export {
+  maxAttemptsForTask,
+  type Task,
+  type TaskHandler,
+  type TaskQueue,
+} from './queue/queue.js';
+export { MemoryQueue } from './queue/memory.js';
+export {
+  createDefaultPatchPipeline,
+  patchBranchName,
+  type DefaultPipelineOptions,
+  type PatchPipeline,
+  type PatchPipelineResult,
+} from './pipeline.js';
+export { verifyWebhookSignature } from './webhook-verify.js';
+export { generateId, generateReadToken, hashReadToken } from './ids.js';
+export { minTrustTier } from './trust.js';
+export { DEFAULT_BRIEF_CONSTRAINTS } from './workers/patch-worker.js';

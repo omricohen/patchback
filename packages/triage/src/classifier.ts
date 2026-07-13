@@ -10,7 +10,11 @@
 import type { FeedbackItem, TriageResult } from '@patchback/types';
 
 import { TriageModelError, type ModelCaller } from './model.js';
-import { buildUserMessage, SYSTEM_PROMPT } from './prompt.js';
+import {
+  buildUserMessage,
+  SYSTEM_PROMPT,
+  type ThreadContext,
+} from './prompt.js';
 import { parseTriageResponse, TRIAGE_OUTPUT_SCHEMA } from './schema.js';
 import {
   applyConfidenceThreshold,
@@ -29,6 +33,12 @@ export interface TriageOptions {
   callModel: ModelCaller;
   /** Demotion gate, default 0.7. Applied per rung — see threshold.ts. */
   confidenceThreshold?: number;
+  /**
+   * Clarification-thread context when the item is a reply. All of it is
+   * untrusted submitter-derived content and is DATA-block-wrapped in the
+   * prompt — see {@link ThreadContext}.
+   */
+  thread?: ThreadContext;
   /** Clock injection for deterministic `triagedAt` in tests. */
   now?: () => Date;
 }
@@ -64,7 +74,7 @@ export async function triageFeedback(
     };
   }
 
-  const { text: user } = buildUserMessage(item);
+  const { text: user } = buildUserMessage(item, options.thread);
 
   let responseText: string;
   try {
