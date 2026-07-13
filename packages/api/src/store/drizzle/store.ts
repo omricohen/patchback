@@ -50,7 +50,10 @@ type JobRow = typeof jobs.$inferSelect;
 export class DrizzleStore implements Store {
   constructor(private readonly db: NodePgDatabase) {}
 
-  async createFeedback(item: FeedbackItem, readTokenHash: string): Promise<void> {
+  async createFeedback(
+    item: FeedbackItem,
+    readTokenHash: string,
+  ): Promise<void> {
     assertTrustTier(item.trustTier, `feedback ${item.id}`);
     await this.db.insert(feedback).values({
       id: item.id,
@@ -119,7 +122,11 @@ export class DrizzleStore implements Store {
   }
 
   async getJob(id: string): Promise<Job | undefined> {
-    const rows = await this.db.select().from(jobs).where(eq(jobs.id, id)).limit(1);
+    const rows = await this.db
+      .select()
+      .from(jobs)
+      .where(eq(jobs.id, id))
+      .limit(1);
     const row = rows[0];
     return row === undefined ? undefined : mapJobRow(row);
   }
@@ -155,7 +162,10 @@ export class DrizzleStore implements Store {
   }
 }
 
-function assertJobStateValue(jobId: string, state: unknown): asserts state is JobState {
+function assertJobStateValue(
+  jobId: string,
+  state: unknown,
+): asserts state is JobState {
   if (!isJobState(state)) {
     throw new StoreIntegrityError(
       `job ${jobId}: invalid state ${JSON.stringify(state)} — refusing to ` +
@@ -191,7 +201,9 @@ export function mapFeedbackRow(row: FeedbackRow): FeedbackItem {
     id: row.id,
     message: row.message,
     trustTier,
-    ...(row.submitter !== null ? { submitter: row.submitter as Submitter } : {}),
+    ...(row.submitter !== null
+      ? { submitter: row.submitter as Submitter }
+      : {}),
     ...(row.capture !== null ? { capture: row.capture as CaptureContext } : {}),
     ...(triage !== undefined ? { triage } : {}),
     ...(row.threadId !== null ? { threadId: row.threadId } : {}),
@@ -238,7 +250,9 @@ function validateTriage(id: string, value: unknown): TriageResult | undefined {
   if (
     typeof value !== 'object' ||
     Array.isArray(value) ||
-    !isTriageClassification((value as { classification?: unknown }).classification) ||
+    !isTriageClassification(
+      (value as { classification?: unknown }).classification,
+    ) ||
     typeof (value as { confidence?: unknown }).confidence !== 'number'
   ) {
     throw new StoreIntegrityError(

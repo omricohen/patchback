@@ -21,7 +21,10 @@ import { canReadFeedback, firstLine, ID_PARAMS_SCHEMA } from './shared.js';
  * Plus triage-before-code: only items triage classified `patchable` may
  * start, and only from the `feedback.triaged` state.
  */
-export function registerJobRoutes(app: FastifyInstance, config: ApiConfig): void {
+export function registerJobRoutes(
+  app: FastifyInstance,
+  config: ApiConfig,
+): void {
   const { store, queue, githubClient } = config;
 
   app.post<{ Params: { id: string } }>(

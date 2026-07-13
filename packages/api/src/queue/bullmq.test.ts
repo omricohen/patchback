@@ -43,7 +43,10 @@ describe.skipIf(redisUrl === undefined)(
   'BullMQQueue against a live Redis (PATCHBACK_TEST_REDIS_URL)',
   () => {
     it('delivers tasks to the handler and retries triage tasks', async () => {
-      const queue = new BullMQQueue(redisUrl as string, `patchback-test-${Date.now()}`);
+      const queue = new BullMQQueue(
+        redisUrl as string,
+        `patchback-test-${Date.now()}`,
+      );
       try {
         const delivered: string[] = [];
         let triageAttempts = 0;
@@ -59,7 +62,11 @@ describe.skipIf(redisUrl === undefined)(
             }
           });
         });
-        await queue.enqueue({ type: 'triage', feedbackId: 'fb-1', jobId: 'j1' });
+        await queue.enqueue({
+          type: 'triage',
+          feedbackId: 'fb-1',
+          jobId: 'j1',
+        });
         await Promise.race([
           done,
           new Promise((_, reject) =>

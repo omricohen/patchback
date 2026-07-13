@@ -178,9 +178,9 @@ export function runStoreConformance(
       expect(stored?.state).toBe('feedback.triaged');
       expect(stored?.history).toHaveLength(1);
       // Unknown job id: false, not an exception.
-      expect(
-        await store.updateJob(makeJob(item.id), INITIAL_JOB_STATE),
-      ).toBe(false);
+      expect(await store.updateJob(makeJob(item.id), INITIAL_JOB_STATE)).toBe(
+        false,
+      );
     });
   });
 }

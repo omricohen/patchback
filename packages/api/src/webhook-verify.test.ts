@@ -47,11 +47,17 @@ describe('verifyWebhookSignature', () => {
   it('rejects malformed and length-gamed headers', () => {
     const valid = sign(payload);
     expect(verifyWebhookSignature(SECRET, payload, valid.slice(7))).toBe(false); // no prefix
-    expect(verifyWebhookSignature(SECRET, payload, `sha1=${'a'.repeat(40)}`)).toBe(false);
+    expect(
+      verifyWebhookSignature(SECRET, payload, `sha1=${'a'.repeat(40)}`),
+    ).toBe(false);
     expect(verifyWebhookSignature(SECRET, payload, 'sha256=')).toBe(false);
     expect(verifyWebhookSignature(SECRET, payload, 'sha256=zz')).toBe(false);
     expect(verifyWebhookSignature(SECRET, payload, `${valid}00`)).toBe(false); // too long
-    expect(verifyWebhookSignature(SECRET, payload, valid.slice(0, -2))).toBe(false); // too short
-    expect(verifyWebhookSignature(SECRET, payload, `sha256=${'g'.repeat(64)}`)).toBe(false); // non-hex
+    expect(verifyWebhookSignature(SECRET, payload, valid.slice(0, -2))).toBe(
+      false,
+    ); // too short
+    expect(
+      verifyWebhookSignature(SECRET, payload, `sha256=${'g'.repeat(64)}`),
+    ).toBe(false); // non-hex
   });
 });

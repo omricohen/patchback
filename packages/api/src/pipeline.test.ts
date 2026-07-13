@@ -186,7 +186,9 @@ describe('createDefaultPatchPipeline', () => {
     const github = createFakeGitHubClient();
     const adapter = makeAdapter(async () => ({
       success: true,
-      changedFiles: [{ path: 'logo.png', additions: 0, deletions: 0, binary: true }],
+      changedFiles: [
+        { path: 'logo.png', additions: 0, deletions: 0, binary: true },
+      ],
       totalChangedLines: 0,
     }));
     const pipeline = createDefaultPatchPipeline({

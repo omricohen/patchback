@@ -1,7 +1,11 @@
 import type { AgentAdapter } from '@patchback/agent-core';
 import type { GitHubClient } from '@patchback/github';
 import type { ModelCaller } from '@patchback/triage';
-import { canInitiatePatchJob, isTrustTier, type TrustTier } from '@patchback/types';
+import {
+  canInitiatePatchJob,
+  isTrustTier,
+  type TrustTier,
+} from '@patchback/types';
 
 import type { PatchPipeline } from './pipeline.js';
 import { createDefaultPatchPipeline } from './pipeline.js';

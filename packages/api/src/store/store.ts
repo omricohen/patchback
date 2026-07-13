@@ -1,4 +1,9 @@
-import type { FeedbackItem, Job, JobState, TriageResult } from '@patchback/types';
+import type {
+  FeedbackItem,
+  Job,
+  JobState,
+  TriageResult,
+} from '@patchback/types';
 
 /**
  * Storage seam for the API. Two implementations:

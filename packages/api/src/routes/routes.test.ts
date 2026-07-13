@@ -1,7 +1,12 @@
 import type { FastifyInstance } from 'fastify';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import type { FeedbackItem, Job, TriageClassification, TrustTier } from '@patchback/types';
+import type {
+  FeedbackItem,
+  Job,
+  TriageClassification,
+  TrustTier,
+} from '@patchback/types';
 import { INITIAL_JOB_STATE, transitionJob } from '@patchback/types';
 
 import {
@@ -195,7 +200,10 @@ describe('read-token enforcement', () => {
     const { app, store } = makeApp();
     const { item, readToken } = await seed(store, { tier: 'insider' });
 
-    const noAuth = await app.inject({ method: 'GET', url: `/feedback/${item.id}` });
+    const noAuth = await app.inject({
+      method: 'GET',
+      url: `/feedback/${item.id}`,
+    });
     expect(noAuth.statusCode).toBe(404);
 
     const wrongToken = await app.inject({
@@ -221,7 +229,7 @@ describe('read-token enforcement', () => {
     expect(withKey.statusCode).toBe(200);
   });
 
-  it("a read token for one item does not open another item", async () => {
+  it('a read token for one item does not open another item', async () => {
     const { app, store } = makeApp();
     const first = await seed(store, { tier: 'insider' });
     const second = await seed(store, { tier: 'insider' });
@@ -236,7 +244,10 @@ describe('read-token enforcement', () => {
   it('GET /jobs/:id/status accepts the owning feedback read token', async () => {
     const { app, store } = makeApp();
     const { job, readToken } = await seed(store, { tier: 'insider' });
-    const denied = await app.inject({ method: 'GET', url: `/jobs/${job.id}/status` });
+    const denied = await app.inject({
+      method: 'GET',
+      url: `/jobs/${job.id}/status`,
+    });
     expect(denied.statusCode).toBe(404);
     const allowed = await app.inject({
       method: 'GET',
@@ -256,10 +267,7 @@ describe('POST /jobs/:id/start gate matrix', () => {
       tier: 'insider',
       classification: 'patchable',
     });
-    for (const headers of [
-      {},
-      { authorization: `Bearer ${readToken}` },
-    ]) {
+    for (const headers of [{}, { authorization: `Bearer ${readToken}` }]) {
       const response = await app.inject({
         method: 'POST',
         url: `/jobs/${job.id}/start`,
@@ -462,11 +470,15 @@ describe('POST /feedback/:id/reply', () => {
     expect(response.statusCode).toBe(201);
     const reply = await store.getFeedback(response.json().id);
     expect(reply?.trustTier).toBe('outsider');
-    expect((await app.inject({
-      method: 'GET',
-      url: `/feedback/${item.id}`,
-      headers: { authorization: `Bearer ${readToken}` },
-    })).json().replies).toHaveLength(1);
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: `/feedback/${item.id}`,
+          headers: { authorization: `Bearer ${readToken}` },
+        })
+      ).json().replies,
+    ).toHaveLength(1);
   });
 
   it('rejects a reply with a trustTier property (schema)', async () => {

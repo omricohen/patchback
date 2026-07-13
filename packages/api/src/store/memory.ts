@@ -1,4 +1,9 @@
-import type { FeedbackItem, Job, JobState, TriageResult } from '@patchback/types';
+import type {
+  FeedbackItem,
+  Job,
+  JobState,
+  TriageResult,
+} from '@patchback/types';
 import { isJobState } from '@patchback/types';
 
 import { StoreIntegrityError } from '../errors.js';
@@ -18,7 +23,10 @@ export class MemoryStore implements Store {
   private readonly readTokenHashes = new Map<string, string>();
   private readonly jobs = new Map<string, Job>();
 
-  async createFeedback(item: FeedbackItem, readTokenHash: string): Promise<void> {
+  async createFeedback(
+    item: FeedbackItem,
+    readTokenHash: string,
+  ): Promise<void> {
     if (this.feedback.has(item.id)) {
       throw new Error(`feedback ${item.id} already exists`);
     }

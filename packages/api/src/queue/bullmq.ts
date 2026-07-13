@@ -77,8 +77,12 @@ export function connectionOptionsFromUrl(redisUrl: string): ConnectionOptions {
   return {
     host: parsed.hostname,
     port: parsed.port === '' ? 6379 : Number(parsed.port),
-    ...(parsed.username !== '' ? { username: decodeURIComponent(parsed.username) } : {}),
-    ...(parsed.password !== '' ? { password: decodeURIComponent(parsed.password) } : {}),
+    ...(parsed.username !== ''
+      ? { username: decodeURIComponent(parsed.username) }
+      : {}),
+    ...(parsed.password !== ''
+      ? { password: decodeURIComponent(parsed.password) }
+      : {}),
     ...(db !== 0 ? { db } : {}),
     ...(parsed.protocol === 'rediss:' ? { tls: {} } : {}),
     // BullMQ workers require this to block on Redis streams indefinitely.

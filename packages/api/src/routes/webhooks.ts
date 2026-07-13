@@ -51,9 +51,7 @@ export function registerWebhookRoutes(
           error: { code: 'validation', message: 'expected a JSON body' },
         });
       }
-      const signature = headerValue(
-        request.headers['x-hub-signature-256'],
-      );
+      const signature = headerValue(request.headers['x-hub-signature-256']);
       if (!verifyWebhookSignature(webhookSecret, raw, signature)) {
         return reply.status(401).send({
           error: { code: 'unauthorized', message: 'invalid webhook signature' },

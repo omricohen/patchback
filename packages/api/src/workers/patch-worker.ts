@@ -1,4 +1,7 @@
-import { createBriefFromTriagedFeedback, type TaskBrief } from '@patchback/agent-core';
+import {
+  createBriefFromTriagedFeedback,
+  type TaskBrief,
+} from '@patchback/agent-core';
 import type { ThreadContext } from '@patchback/triage';
 import type { FeedbackItem, Job } from '@patchback/types';
 import { transitionJob } from '@patchback/types';
@@ -107,7 +110,9 @@ export function buildBriefFields(
       descriptionParts.push(`> ${prior}`);
     }
     if (thread.clarifyingQuestion !== undefined) {
-      descriptionParts.push(`Clarifying question asked: ${thread.clarifyingQuestion}`);
+      descriptionParts.push(
+        `Clarifying question asked: ${thread.clarifyingQuestion}`,
+      );
     }
     descriptionParts.push(`User's answer / latest feedback: ${item.message}`);
   } else {

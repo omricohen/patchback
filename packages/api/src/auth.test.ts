@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import { resolveAuth } from './auth.js';
-import { ConfigError, validateConfig, type ApiConfig, type ApiKeyEntry } from './config.js';
+import {
+  ConfigError,
+  validateConfig,
+  type ApiConfig,
+  type ApiKeyEntry,
+} from './config.js';
 import { MemoryQueue } from './queue/memory.js';
 import { MemoryStore } from './store/memory.js';
 
@@ -92,9 +97,7 @@ describe('validateConfig', () => {
     expect(() =>
       validateConfig(
         baseConfig({
-          apiKeys: [
-            { key: 'x'.repeat(24), tier: 'outsider' as never },
-          ],
+          apiKeys: [{ key: 'x'.repeat(24), tier: 'outsider' as never }],
         }),
       ),
     ).toThrow(ConfigError);

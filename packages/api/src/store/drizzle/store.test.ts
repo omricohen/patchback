@@ -61,9 +61,9 @@ describe('drizzle row mapping (fail closed on corruption)', () => {
     expect(() =>
       mapFeedbackRow({ ...baseFeedbackRow, trustTier: 'superadmin' }),
     ).toThrow(StoreIntegrityError);
-    expect(() =>
-      mapFeedbackRow({ ...baseFeedbackRow, trustTier: '' }),
-    ).toThrow(StoreIntegrityError);
+    expect(() => mapFeedbackRow({ ...baseFeedbackRow, trustTier: '' })).toThrow(
+      StoreIntegrityError,
+    );
   });
 
   it('throws StoreIntegrityError on a corrupted triage payload', () => {
@@ -102,9 +102,9 @@ describe('drizzle row mapping (fail closed on corruption)', () => {
     expect(() => mapJobRow({ ...baseJobRow, state: 'patch.autoship' })).toThrow(
       StoreIntegrityError,
     );
-    expect(() =>
-      mapJobRow({ ...baseJobRow, history: 'not-an-array' }),
-    ).toThrow(StoreIntegrityError);
+    expect(() => mapJobRow({ ...baseJobRow, history: 'not-an-array' })).toThrow(
+      StoreIntegrityError,
+    );
     expect(() =>
       mapJobRow({
         ...baseJobRow,
@@ -147,7 +147,10 @@ if (databaseUrl !== undefined) {
         await db.execute(sql.raw('drop table if exists "jobs" cascade'));
         await db.execute(sql.raw('drop table if exists "feedback" cascade'));
         for (const file of files) {
-          const content = await readFile(path.join(migrationsDir, file), 'utf8');
+          const content = await readFile(
+            path.join(migrationsDir, file),
+            'utf8',
+          );
           for (const statement of content.split('--> statement-breakpoint')) {
             await db.execute(sql.raw(statement));
           }

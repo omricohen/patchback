@@ -1,4 +1,9 @@
-import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
+import {
+  createHash,
+  randomBytes,
+  randomUUID,
+  timingSafeEqual,
+} from 'node:crypto';
 
 /** New entity id. UUIDv4 — opaque, URL-safe, and collision-free. */
 export function generateId(): string {

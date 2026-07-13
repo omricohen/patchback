@@ -31,8 +31,14 @@ export const feedback = pgTable(
     threadId: text('thread_id'),
     inReplyTo: text('in_reply_to'),
     readTokenHash: text('read_token_hash').notNull(),
-    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull(),
-    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull(),
+    createdAt: timestamp('created_at', {
+      withTimezone: true,
+      mode: 'date',
+    }).notNull(),
+    updatedAt: timestamp('updated_at', {
+      withTimezone: true,
+      mode: 'date',
+    }).notNull(),
   },
   (table) => [
     index('feedback_thread_id_idx').on(table.threadId),
@@ -57,8 +63,14 @@ export const jobs = pgTable(
     prNumber: integer('pr_number'),
     prUrl: text('pr_url'),
     error: text('error'),
-    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull(),
-    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull(),
+    createdAt: timestamp('created_at', {
+      withTimezone: true,
+      mode: 'date',
+    }).notNull(),
+    updatedAt: timestamp('updated_at', {
+      withTimezone: true,
+      mode: 'date',
+    }).notNull(),
   },
   (table) => [
     index('jobs_feedback_id_idx').on(table.feedbackId),

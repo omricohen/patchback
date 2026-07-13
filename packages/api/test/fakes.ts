@@ -113,7 +113,9 @@ export function createFakeGitHubClient(
         url: `https://github.com/${repo.owner}/${repo.repo}/commit/${'b'.repeat(40)}`,
       };
     },
-    async openPullRequest(input: OpenPullRequestInput): Promise<PullRequestRef> {
+    async openPullRequest(
+      input: OpenPullRequestInput,
+    ): Promise<PullRequestRef> {
       callLog.push('openPullRequest');
       pullRequests.push(input);
       const number = 500 + pullRequests.length;
@@ -143,9 +145,7 @@ export interface FakePipeline extends PatchPipeline {
 }
 
 /** A pipeline returning a scripted result and recording every invocation. */
-export function createFakePipeline(
-  result?: PatchPipelineResult,
-): FakePipeline {
+export function createFakePipeline(result?: PatchPipelineResult): FakePipeline {
   const runs: Array<{ brief: GuardedTaskBrief; job: Job }> = [];
   return {
     runs,

@@ -158,7 +158,9 @@ export function createDefaultPatchPipeline(
               prUrl: pr.url,
             };
           },
-          scratchBaseDir !== undefined ? { baseDir: scratchBaseDir } : undefined,
+          scratchBaseDir !== undefined
+            ? { baseDir: scratchBaseDir }
+            : undefined,
         );
       } catch (error) {
         return {

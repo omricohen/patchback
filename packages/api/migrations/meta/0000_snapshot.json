@@ -212,12 +212,8 @@
           "name": "jobs_feedback_id_feedback_id_fk",
           "tableFrom": "jobs",
           "tableTo": "feedback",
-          "columnsFrom": [
-            "feedback_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["feedback_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
