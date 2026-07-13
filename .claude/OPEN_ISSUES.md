@@ -17,3 +17,5 @@
 - **[2026-07-10 → 2026-07-10] Brief trust-tier guard not yet structural** — resolved in Phase 5 via the guarded-factory option: `GuardedTaskBrief` is branded with a unique symbol (not object-literal-constructible); `createBriefFromTriagedFeedback` is the only producer and enforces `canInitiatePatchJob(tier)` AND `triage.classification === 'patchable'`, stamping `feedbackId` + `sourceTier`; `AgentContext.brief` now requires the branded type.
 
 - **[2026-07-10 → 2026-07-10] CLAUDE.md referenced missing/misplaced docs** — moved BUILD_PLAN.md to docs/, created docs/extraction-checklist.md and provisional docs/SPEC.md.
+
+- **[2026-07-13] Phase 6 verifier advisories** — (1) stale header comment in packages/api routes/feedback.ts says reply tier includes the caller; code deliberately uses thread-minimum only, so a leaked read token submits at the thread's tier (capability-model choice; document it); (2) POST /jobs/:id/start creates the GitHub issue before the CAS — two concurrent starts can duplicate issues; (3) patch-worker success-path CAS failure silently drops PR metadata (add a log line). All non-critical; fold into Phase 8 or 10.
