@@ -22,5 +22,5 @@ export {
   DEFAULT_CONFIDENCE_THRESHOLD,
   FALLBACK_CLARIFYING_QUESTION,
 } from './threshold.js';
-export { SYSTEM_PROMPT } from './prompt.js';
+export { SYSTEM_PROMPT, type ThreadContext } from './prompt.js';
 export { TRIAGE_OUTPUT_SCHEMA } from './schema.js';
