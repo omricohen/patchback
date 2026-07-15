@@ -4,75 +4,79 @@ _Last updated: 2026-07-15_
 
 ## Current phase
 
-**Phase 9 (Examples, docs, demo) — code + docs DONE** on branch
-`phase-9-examples-docs` (not merged, not pushed — Omri's call). Phase 8
-(`phase-8-cli`) was merged to main before this phase started. Phase 2
-(extraction pass) still pending source material in `extraction-inbox/`.
+**Phase 10 (Launch hardening) — automatable portion DONE** on branch
+`phase-10-hardening` (not merged, not pushed — Omri's call). Phase 9 was
+merged to main before this phase started. This is the LAST build-plan
+phase; what remains is exclusively the human-only launch list below.
 
-Two Phase-9 acceptance items are deferred to Omri because they need real
-credentials and a second human (logged in OPEN_ISSUES): the
-stranger's-repo gauntlet (3 unfamiliar repos, one expected graceful
-failure) and the under-10-minutes quickstart timing by someone else.
+## What's done (Phase 10)
 
-## What's done (Phase 9)
+- **Secret sweep** — gitleaks 8.30.1 installed (brew). History scan (60
+  commits) + tree scan (`gitleaks dir` over a git-archive of HEAD, so the
+  gitignored real `.env` never enters) both CLEAN. One raw finding — the
+  synthetic `owner-key-0123456789abcdef` fixture in
+  `packages/api/src/auth.test.ts` — allowlisted in a committed
+  `.gitleaks.toml` (fixtures/placeholders only, each with a comment;
+  header says unexplained findings get flagged, never allowlisted).
+  Verified `.env` was never committed in any ref.
+- **Forbidden-content sweep** — tree AND full history grep: "Mission
+  Control" appears only in the rule text (CLAUDE.md +
+  extraction-checklist); no `staging.`/`.internal`/`.corp`/`.local`
+  hostnames; fixture names are synthetic companies, emails `@example.com`;
+  the only `/Users/` strings are deliberately fake paths
+  (`/Users/example-user/…`) inside the dot-dir-leak regression tests.
+  Nothing needed fixing.
+- **Publish prep** — all 10 public packages (`@patchback/{types,widget,
+react,sdk,api,github,agent-core,agent-claude-code,triage}` +
+  `patchback`) de-privated with uniform metadata (MIT, repo/homepage/bugs
+  → github.com/omricohen/patchback, keywords, `files: ["dist",
+"README.md"]`, engines node>=20, publishConfig public). New minimal
+  READMEs for types/api/agent-core/agent-claude-code/triage/cli (code
+  samples verified against real exports: `transitionJob`, `buildServer`).
+  `agent-claude-code/src/fixture.ts` (test scaffolding) excluded from the
+  build so it left the tarball. `pnpm -r publish --dry-run
+--no-git-checks` green 10/10; tarball audit clean (dist + README +
+  LICENSE + package.json only); `workspace:*` → `0.0.1` verified via
+  `pnpm pack`. Root/apps/examples stay private.
+- **ROADMAP.md** (root) — App mode, dashboard, hosted, indexing, outsider
+  clustering, Vue, per-user token exchange, check-runner sandboxing,
+  SQLite, `pr.closed` state revision, issue idempotency, custom check
+  commands, Temporal. github README's "Phase 10" App-mode refs now point
+  at it; root README links CONTRIBUTING/ROADMAP/SECURITY.
+- **Repo metadata** — `.github/ISSUE_TEMPLATE/{bug_report,feature_request}.md`,
+  `.github/PULL_REQUEST_TEMPLATE.md` (gate + no-secrets + hard-rules
+  checklist), CONTRIBUTING.md (pnpm-only setup, gate command, phase-branch
+  note, the five hard rules), CODE_OF_CONDUCT.md (Contributor Covenant
+  2.1, GitHub-native contact — no email committed).
+- **Extraction checklist** — every mechanically verifiable box checked
+  with a one-line evidence note; human-only work consolidated in a new
+  "Remaining — requires Omri" section (8 items).
+- Gate green at root: `pnpm lint && pnpm typecheck && pnpm test && pnpm
+build` + `pnpm format:check`.
 
-- **`examples/nextjs-demo`** — the demo-GIF set: a Next.js 15 (pinned
-  15.5.19, aged release) "Acme Ops" dashboard with a synthetic orders
-  table and THREE deliberate one-line flaws ("Ammount" header typo,
-  oldest-first default sort, mislabeled "Pending only" filter), each
-  marked `DELIBERATE DEMO FLAW` in source. The widget is embedded via the
-  exact snippet pattern `patchback dev` prints, re-created as a client
-  component (`app/components/patchback-snippet.tsx`) with the per-run
-  insider key env-injected (`NEXT_PUBLIC_PATCHBACK_API_KEY` from
-  `.env.local`; template `.env.example`); keyless it renders a visible
-  setup note. Smoke tests (5) render the page/dashboard/snippet in jsdom
-  and deliberately do NOT pin the flaws — the demo PR that fixes one must
-  stay green. Package turbo.json caches `.next/**`; `next-env.d.ts` is
-  eslint-ignored; test JSX compiles via Vite 8's `oxc.jsx` option (the
-  esbuild override is ignored by Vite 8 — see DECISIONS).
-- **`examples/vite-demo`** — minimal vanilla embed: static page + one
-  `createPatchbackWidget` call (`src/main.ts`), key via
-  `VITE_PATCHBACK_API_KEY`, one seeded flaw ("Whats new"), jsdom smoke
-  test, port 5174 (README notes the appOrigins addition it needs).
-- **README quickstart** — rewritten against verified CLI reality: ran the
-  built CLI's help/version, a scripted `patchback init` in a scratch dir
-  (observed the live token probe's actionable 401 message and 3-attempt
-  re-prompt), and the dev harness over injected fakes (captured the real
-  banner, `/snippet`, `/widget.js` 200). Written for the published
-  `npx patchback dev` future with a "running from this repo today"
-  callout (`pnpm install && pnpm build && node packages/cli/dist/index.js
-dev`). Prereqs name the exact fine-grained token scopes (linking
-  packages/github/README.md), the Anthropic key, and the `claude` CLI
-  2.1+ requirement.
-- **`docs/demo-flow.md`** — the reproducible GIF script: flaw table, boot
-  commands for both terminals, the user-voice defect report to type
-  ("Spotted a typo in the orders table: the amount column header says
-  'Ammount'." — a report, never an instruction, per the 2026-07-15
-  fixture decision), expected state stream at each click, expected PR
-  shape (one-line diff, `patchback/issue-<n>` branch, no dot-dir
-  artifacts), the clarification branch as a non-failure, and cleanup.
-- Gate green at root: `pnpm lint && pnpm typecheck && pnpm test &&
-pnpm build` + `pnpm format:check` (examples included: both build, 6
-  example tests pass).
+## Next concrete step — all Omri, in order
 
-## Next concrete step
+1. Review + merge `phase-10-hardening`; push.
+2. Real `pnpm -r publish` (after `npm login`).
+3. `npx patchback dev` from a clean machine via the published packages.
+4. Stranger's-repo gauntlet (3 repos, one graceful failure) + quickstart
+   timed by someone else (carried from Phase 9).
+5. Demo GIF: run `docs/demo-flow.md` on examples/nextjs-demo, record.
+6. One forbidden-term pass with the private term list (only Omri has it).
+7. GitHub settings: description, topics, social image, private
+   vulnerability reporting; then flip public.
 
-1. Review + merge `phase-9-examples-docs`.
-2. Omri: run the stranger's-repo gauntlet + timed quickstart (deferred
-   Phase-9 acceptance, see OPEN_ISSUES) — can fold into Phase 10.
-3. Phase 10 — launch hardening (gitleaks + forbidden-term sweep, publish
-   dry-run, `npx patchback dev` from a clean machine, extraction
-   checklist completion). Shooting the actual GIF needs Phase 9's demo
-   flow + real credentials.
-4. Still pending: Phase 2 extraction inbox.
+Full list with evidence notes: docs/extraction-checklist.md, "Remaining —
+requires Omri".
 
 ## Context to pick up cleanly
 
-- Phase-9 decisions in `.claude/DECISIONS.md` (2026-07-15): env-injected
-  per-run key in examples (+ rejected alternatives), flaws-never-pinned
-  test rule, next@15.5.19 exact pin + the Vite-8-oxc JSX gotcha.
-- The examples README run instructions use the from-this-repo form; swap
-  to `npx patchback dev` when Phase 10 publishes.
-- pnpm ignored `sharp@0.34.5`'s build script on install (Next optional
-  image optimization — unused by the demo; approve via `pnpm
-approve-builds` only if next/image ever gets used).
+- Phase-10 decisions in `.claude/DECISIONS.md` (2026-07-15): gitleaks
+  allowlist policy, publish posture (maps shipped, fixture.ts excluded),
+  ROADMAP placement, CoC contact choice.
+- Phase 2's extraction inbox was never used — the codebase was written
+  fresh, which is why the checklist's inbox/fresh-history boxes are
+  checkable. `extraction-inbox/` is empty and stays gitignored.
+- The examples' READMEs still use the run-from-this-repo form; swap to
+  `npx patchback dev` once the real publish lands (README quickstart
+  already written for the published future with a callout).
