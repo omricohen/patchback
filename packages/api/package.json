@@ -1,8 +1,24 @@
 {
   "name": "@patchback/api",
   "version": "0.0.1",
-  "private": true,
   "description": "Fastify API: feedback, jobs, webhooks",
+  "keywords": [
+    "patchback",
+    "feedback",
+    "api",
+    "fastify",
+    "queue"
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/omricohen/patchback/tree/main/packages/api#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/omricohen/patchback.git",
+    "directory": "packages/api"
+  },
+  "bugs": {
+    "url": "https://github.com/omricohen/patchback/issues"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -23,6 +39,16 @@
       "types": "./dist/testing.d.ts",
       "default": "./dist/testing.js"
     }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

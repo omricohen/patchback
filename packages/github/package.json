@@ -1,8 +1,24 @@
 {
   "name": "@patchback/github",
   "version": "0.0.1",
-  "private": true,
   "description": "GitHub integration: issues, branches, PRs (token + App modes)",
+  "keywords": [
+    "patchback",
+    "github",
+    "pull-request",
+    "issues",
+    "fine-grained-token"
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/omricohen/patchback/tree/main/packages/github#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/omricohen/patchback.git",
+    "directory": "packages/github"
+  },
+  "bugs": {
+    "url": "https://github.com/omricohen/patchback/issues"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -11,6 +27,16 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

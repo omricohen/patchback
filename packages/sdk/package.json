@@ -1,8 +1,23 @@
 {
   "name": "@patchback/sdk",
   "version": "0.0.1",
-  "private": true,
   "description": "Client SDK: submit feedback, threads, job status",
+  "keywords": [
+    "patchback",
+    "feedback",
+    "sdk",
+    "client"
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/omricohen/patchback/tree/main/packages/sdk#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/omricohen/patchback.git",
+    "directory": "packages/sdk"
+  },
+  "bugs": {
+    "url": "https://github.com/omricohen/patchback/issues"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -11,6 +26,16 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
