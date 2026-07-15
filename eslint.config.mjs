@@ -16,8 +16,8 @@ export default tseslint.config(
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    // Plain-JS test fixtures (e.g. the fake Claude Code CLI) run under Node.
-    files: ['**/test/fixtures/**/*.mjs'],
+    // Plain-JS test fixtures and dev-harness scripts run under Node.
+    files: ['**/test/fixtures/**/*.mjs', '**/scripts/**/*.mjs'],
     languageOptions: {
       globals: {
         process: 'readonly',
@@ -25,6 +25,8 @@ export default tseslint.config(
         setTimeout: 'readonly',
         clearTimeout: 'readonly',
         Buffer: 'readonly',
+        URL: 'readonly',
+        fetch: 'readonly',
       },
     },
   },

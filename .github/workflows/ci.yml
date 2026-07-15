@@ -20,3 +20,21 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+
+  # Phase-7 acceptance in a real browser: pick → submit → status walk, plus
+  # payload + screenshot PIXEL proofs that masked inputs never leak. Kept as
+  # a dedicated required job so `pnpm test` on fresh clones stays
+  # browser-free while the acceptance is enforced on every push.
+  browser-acceptance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm --filter widget-playground exec playwright install --with-deps chromium
+      - run: PATCHBACK_BROWSER_TESTS=1 pnpm --filter widget-playground test

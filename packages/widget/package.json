@@ -13,8 +13,16 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && vite build",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.typecheck.json"
+  },
+  "dependencies": {
+    "@patchback/sdk": "workspace:*",
+    "@patchback/types": "workspace:*",
+    "@zumer/snapdom": "2.12.8"
+  },
+  "devDependencies": {
+    "vite": "^8.1.4"
   }
 }
