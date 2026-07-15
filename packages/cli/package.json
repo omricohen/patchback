@@ -1,24 +1,51 @@
 {
   "name": "patchback",
   "version": "0.0.1",
-  "private": true,
   "description": "Patchback CLI, including npx patchback dev",
+  "keywords": [
+    "patchback",
+    "feedback",
+    "cli",
+    "pull-request",
+    "ai-agent",
+    "github"
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/omricohen/patchback/tree/main/packages/cli#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/omricohen/patchback.git",
+    "directory": "packages/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/omricohen/patchback/issues"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "bin": {
+    "patchback": "./dist/index.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     }
   },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.typecheck.json"
-  },
-  "bin": {
-    "patchback": "./dist/index.js"
   },
   "dependencies": {
     "@patchback/agent-claude-code": "workspace:*",

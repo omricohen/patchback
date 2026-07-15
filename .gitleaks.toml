@@ -1,0 +1,24 @@
+# gitleaks configuration for Patchback.
+#
+# Extends the default ruleset. The allowlist below covers ONLY obviously
+# synthetic fixtures and documented placeholders — never real credentials.
+# If gitleaks flags something not covered here, treat it as real: stop and
+# flag it to Omri (see docs/extraction-checklist.md), do not extend this list.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Synthetic test fixtures and documented placeholders"
+regexes = [
+  # packages/api/src/auth.test.ts tier fixtures: owner-key-0123456789abcdef etc.
+  # Sequential-hex suffix, committed next to the tier names they exercise.
+  '''(owner|insider|outsider)-key-0123456789abcdef''',
+  # Documented placeholders in .env.example and READMEs: github_pat_xxx…, sk-ant-xxx…
+  '''github_pat_x{10,}''',
+  '''sk-ant-x{10,}''',
+  # Masking/scrub + CLI test fixtures: all-zero or *_test_* token bodies
+  # (e.g. ghp_test, github_pat_test_000…, ghp_000…test).
+  '''gh[pousr]_(test|0{10,}[A-Za-z0-9_]*)''',
+  '''github_pat_(test|super_secret_value|0{10,})[A-Za-z0-9_]*''',
+]

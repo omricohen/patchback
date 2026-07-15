@@ -1,8 +1,25 @@
 {
   "name": "@patchback/widget",
   "version": "0.0.1",
-  "private": true,
   "description": "Vanilla embeddable feedback widget",
+  "keywords": [
+    "patchback",
+    "feedback",
+    "widget",
+    "embeddable",
+    "screenshot",
+    "masking"
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/omricohen/patchback/tree/main/packages/widget#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/omricohen/patchback.git",
+    "directory": "packages/widget"
+  },
+  "bugs": {
+    "url": "https://github.com/omricohen/patchback/issues"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -11,6 +28,16 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json && vite build",
