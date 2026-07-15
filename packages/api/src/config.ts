@@ -59,6 +59,20 @@ export interface ApiConfig {
    * ONLY when this is set — there is no "verification disabled" mode.
    */
   webhookSecret?: string;
+  /**
+   * Cross-origin embedding. OFF by default — the API sends no CORS headers
+   * unless the operator lists the exact origins their app is served from
+   * (e.g. `http://localhost:3000` for `patchback dev`). A `*` entry is
+   * rejected at startup: this API authenticates with bearer tokens, and a
+   * wildcard would hand every website a same-credentials surface.
+   */
+  cors?: { allowedOrigins: readonly string[] };
+  /**
+   * Operational log line sink (state-transition anomalies worth a human's
+   * eyes, e.g. a lost success-path CAS). Defaults to silent — the CLI wires
+   * this to its terminal stream. Never receives secrets or request bodies.
+   */
+  log?: (message: string) => void;
   /** Triage demotion gate, default 0.7 (see @patchback/triage). */
   confidenceThreshold?: number;
   /** Constraints stamped into every task brief. */
@@ -103,6 +117,28 @@ export function validateConfig(config: ApiConfig): void {
     throw new ConfigError(
       'webhookSecret must be at least 16 characters when set',
     );
+  }
+  if (config.cors !== undefined) {
+    if (config.cors.allowedOrigins.length === 0) {
+      throw new ConfigError(
+        'cors.allowedOrigins must list at least one origin when cors is ' +
+          'configured — omit `cors` entirely to disable cross-origin access',
+      );
+    }
+    for (const origin of config.cors.allowedOrigins) {
+      if (origin === '*' || origin.includes('*')) {
+        throw new ConfigError(
+          'cors.allowedOrigins must list exact origins — a wildcard is not ' +
+            'allowed on an API that authenticates with bearer tokens',
+        );
+      }
+      if (!/^https?:\/\/[^/\s]+$/.test(origin)) {
+        throw new ConfigError(
+          `cors.allowedOrigins: ${JSON.stringify(origin)} is not an origin — ` +
+            'expected scheme://host[:port] with no path, e.g. "http://localhost:3000"',
+        );
+      }
+    }
   }
   if (
     config.confidenceThreshold !== undefined &&

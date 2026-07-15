@@ -83,7 +83,18 @@ export async function runPatchTask(
         prNumber: result.prNumber,
         prUrl: result.prUrl,
       };
-      await store.updateJob(updated, 'patch.running');
+      const swapped = await store.updateJob(updated, 'patch.running');
+      if (!swapped) {
+        // The PR exists on GitHub but the job moved out of patch.running
+        // underneath us, so the PR metadata (branch, number, URL) could not
+        // be recorded. Loud, not silent — a human should reconcile.
+        config.log?.(
+          `patch-worker: job ${job.id} succeeded (PR #${result.prNumber}, ` +
+            `${result.prUrl}) but the success CAS from patch.running failed — ` +
+            'the job state changed concurrently and the PR metadata was NOT ' +
+            'recorded on the job',
+        );
+      }
     } else {
       await fail(result.error);
     }
