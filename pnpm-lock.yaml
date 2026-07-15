@@ -93,7 +93,15 @@ importers:
 
   packages/react: {}
 
-  packages/sdk: {}
+  packages/sdk:
+    dependencies:
+      '@patchback/types':
+        specifier: workspace:*
+        version: link:../types
+    devDependencies:
+      '@patchback/api':
+        specifier: workspace:*
+        version: link:../api
 
   packages/triage:
     dependencies:
