@@ -26,15 +26,17 @@ export type {
 } from './config.js';
 export { WidgetConfigError } from './config.js';
 export type { WidgetEventMap, WidgetEventName } from './events.js';
-export {
-  createMaskingEngine,
-  type MaskingEngine,
-} from './masking/engine.js';
+export { createMaskingEngine, type MaskingEngine } from './masking/engine.js';
 export {
   MaskingConfigError,
   type MaskClassification,
   type MaskingConfig,
 } from './masking/policy.js';
 export { scrubText } from './masking/scrub.js';
-export { STATUS_MAP, presentState, type StatusPresentation, type StatusTone } from './status-map.js';
+export {
+  STATUS_MAP,
+  presentState,
+  type StatusPresentation,
+  type StatusTone,
+} from './status-map.js';
 export type { ThreadEntry, ThreadRecord } from './storage.js';

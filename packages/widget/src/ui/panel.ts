@@ -69,7 +69,9 @@ export function renderPanel(
   }
   if (capture.screenshot) {
     const shot = h('button', { className: 'pb-btn', type: 'button' }, [
-      draft.screenshot === undefined ? 'Attach screenshot' : 'Retake screenshot',
+      draft.screenshot === undefined
+        ? 'Attach screenshot'
+        : 'Retake screenshot',
     ]);
     shot.addEventListener('click', () => actions.onScreenshot());
     actionsRow.append(shot);
@@ -197,7 +199,9 @@ function renderPreview(state: PanelState, actions: PanelActions): HTMLElement {
     const list = h('div', { className: 'pb-console-list' });
     list.style.display = 'none';
     for (const entry of state.consoleEntries) {
-      list.append(h('div', {}, [`[${entry.level}] ${truncate(entry.message, 160)}`]));
+      list.append(
+        h('div', {}, [`[${entry.level}] ${truncate(entry.message, 160)}`]),
+      );
     }
     toggle.addEventListener('click', () => {
       const hidden = list.style.display === 'none';

@@ -101,9 +101,9 @@ describe('widget lifecycle', () => {
   });
 
   it('throws loudly at init on invalid masking selectors', () => {
-    expect(() =>
-      makeWidget({ masking: { maskSelectors: ['<<<'] } }),
-    ).toThrow(MaskingConfigError);
+    expect(() => makeWidget({ masking: { maskSelectors: ['<<<'] } })).toThrow(
+      MaskingConfigError,
+    );
   });
 
   it('submits through the SDK and renders the thread view with a status chip', async () => {

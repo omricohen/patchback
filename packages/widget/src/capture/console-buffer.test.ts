@@ -46,7 +46,10 @@ function fakeWindow(): {
 describe('console ring buffer', () => {
   it('records errors and calls the original through', () => {
     const { target, calls } = fakeConsole();
-    const buffer = createConsoleBuffer({ console: target, window: fakeWindow().target });
+    const buffer = createConsoleBuffer({
+      console: target,
+      window: fakeWindow().target,
+    });
     buffer.install();
     target.error('boom', 42);
     expect(buffer.entries()).toHaveLength(1);
@@ -101,7 +104,9 @@ describe('console ring buffer', () => {
       window: fakeWindow().target,
     });
     buffer.install();
-    target.error('auth failed for user@example.com with sk-000000000000000000000000test');
+    target.error(
+      'auth failed for user@example.com with sk-000000000000000000000000test',
+    );
     const message = buffer.entries()[0]?.message ?? '';
     expect(message).toContain('[email]');
     expect(message).toContain('[redacted-key]');

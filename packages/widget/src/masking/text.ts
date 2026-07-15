@@ -1,7 +1,4 @@
-import {
-  classifyElement,
-  type ResolvedMaskingConfig,
-} from './policy.js';
+import { classifyElement, type ResolvedMaskingConfig } from './policy.js';
 import { scrubText } from './scrub.js';
 
 /** Placeholder that replaces a masked element's text in picker captures. */

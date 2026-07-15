@@ -1,7 +1,4 @@
-import type {
-  FeedbackThreadResponse,
-  JobStatusResponse,
-} from '@patchback/sdk';
+import type { FeedbackThreadResponse, JobStatusResponse } from '@patchback/sdk';
 
 import { presentState } from '../status-map.js';
 import { h, clear } from './dom.js';
@@ -175,7 +172,9 @@ export function renderThread(
   }
 
   if (state.error !== undefined) {
-    children.push(h('div', { className: 'pb-error', role: 'alert' }, [state.error]));
+    children.push(
+      h('div', { className: 'pb-error', role: 'alert' }, [state.error]),
+    );
   }
 
   const newFeedback = h('button', { className: 'pb-btn', type: 'button' }, [

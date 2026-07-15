@@ -73,7 +73,10 @@ export async function pollJobStatus(
         throw error;
       }
       const base = lastState === 'feedback.received' ? fastMs : slowMs;
-      backoffMs = Math.min(backoffMs === undefined ? base * 2 : backoffMs * 2, maxBackoffMs);
+      backoffMs = Math.min(
+        backoffMs === undefined ? base * 2 : backoffMs * 2,
+        maxBackoffMs,
+      );
       options.onConnectionIssue?.(error);
     }
     const interval =

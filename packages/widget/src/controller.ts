@@ -23,7 +23,11 @@ import {
   type ConsoleBuffer,
 } from './capture/console-buffer.js';
 import { sanitizeUrl } from './capture/url.js';
-import { createEmitter, type WidgetEventMap, type WidgetEventName } from './events.js';
+import {
+  createEmitter,
+  type WidgetEventMap,
+  type WidgetEventName,
+} from './events.js';
 import { createMaskingEngine, type MaskingEngine } from './masking/engine.js';
 import { scrubText } from './masking/scrub.js';
 import { createThreadStore, type ThreadStore } from './storage.js';
@@ -113,7 +117,11 @@ export function createWidgetController(
   if (config.launcher !== false) {
     launcherButton = h(
       'button',
-      { className: 'pb-launcher', type: 'button', 'aria-label': 'Send feedback' },
+      {
+        className: 'pb-launcher',
+        type: 'button',
+        'aria-label': 'Send feedback',
+      },
       [],
     );
     launcherButton.innerHTML =
@@ -381,6 +389,12 @@ export function createWidgetController(
       { readToken: active.readToken },
       {
         signal: abort.signal,
+        ...(config.polling?.fastMs !== undefined
+          ? { fastMs: config.polling.fastMs }
+          : {}),
+        ...(config.polling?.slowMs !== undefined
+          ? { slowMs: config.polling.slowMs }
+          : {}),
         onUpdate: (update) => {
           connectionLost = false;
           const changed = status?.state !== update.state;

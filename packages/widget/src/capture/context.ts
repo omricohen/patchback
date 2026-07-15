@@ -116,14 +116,14 @@ export function buildCaptureContext(
     preview.consoleEntries.length > 0 &&
     preview.includeConsole !== false
   ) {
-    context.console = preview.consoleEntries.slice(-capture.console.max).map(
-      (entry) => ({
+    context.console = preview.consoleEntries
+      .slice(-capture.console.max)
+      .map((entry) => ({
         level: entry.level,
         // Scrubbed at insert; scrub again at the choke point (idempotent).
         message: engine.scrub(entry.message).slice(0, 2000),
         timestamp: entry.timestamp,
-      }),
-    );
+      }));
   }
 
   return context;

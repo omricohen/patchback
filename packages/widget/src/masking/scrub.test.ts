@@ -23,9 +23,9 @@ describe('scrubText', () => {
     expect(scrubText('ghp_00000000000000000000test in log')).toBe(
       '[redacted-key] in log',
     );
-    expect(
-      scrubText('github_pat_000000000000000000000000test here'),
-    ).toBe('[redacted-key] here');
+    expect(scrubText('github_pat_000000000000000000000000test here')).toBe(
+      '[redacted-key] here',
+    );
     expect(scrubText('aws AKIA0000000000000000 used')).toBe(
       'aws [redacted-key] used',
     );

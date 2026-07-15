@@ -7,12 +7,7 @@ import type { JobState, TriageClassification } from '@patchback/types';
  * canonical state breaks the build here, which is the desired alarm.
  */
 export type StatusTone =
-  | 'neutral'
-  | 'info'
-  | 'progress'
-  | 'attention'
-  | 'warning'
-  | 'success';
+  'neutral' | 'info' | 'progress' | 'attention' | 'warning' | 'success';
 
 export interface StatusPresentation {
   label: string;

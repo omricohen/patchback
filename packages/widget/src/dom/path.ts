@@ -74,7 +74,9 @@ export function looksGenerated(id: string): boolean {
   if (/\d{8,}$/.test(id)) {
     return true;
   }
-  if (/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(id)) {
+  if (
+    /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(id)
+  ) {
     return true;
   }
   if (/^:.*:$/.test(id) || /^radix-/.test(id)) {
@@ -114,8 +116,8 @@ function cap(path: string): string {
 }
 
 function cssEscape(value: string): string {
-  const impl = (globalThis as { CSS?: { escape?: (v: string) => string } })
-    .CSS?.escape;
+  const impl = (globalThis as { CSS?: { escape?: (v: string) => string } }).CSS
+    ?.escape;
   if (typeof impl === 'function') {
     return impl(value);
   }

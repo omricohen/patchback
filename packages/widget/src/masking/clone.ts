@@ -92,7 +92,11 @@ function blankAllText(el: Element): void {
     return;
   }
   const texts: Node[] = [];
-  for (let node = walkerRoot.nextNode(); node !== null; node = walkerRoot.nextNode()) {
+  for (
+    let node = walkerRoot.nextNode();
+    node !== null;
+    node = walkerRoot.nextNode()
+  ) {
     texts.push(node);
   }
   for (const node of texts) {

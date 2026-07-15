@@ -205,7 +205,11 @@ export function classifyElement(
   el: Element,
   config: ResolvedMaskingConfig,
 ): MaskClassification {
-  for (let node: Element | null = el; node !== null; node = flatTreeParent(node)) {
+  for (
+    let node: Element | null = el;
+    node !== null;
+    node = flatTreeParent(node)
+  ) {
     if (
       node.hasAttribute(IGNORE_ATTR) ||
       matchesAny(node, config.ignoreSelectors)
@@ -216,12 +220,20 @@ export function classifyElement(
   if (isCrossOriginIframe(el)) {
     return 'ignored';
   }
-  for (let node: Element | null = el; node !== null; node = flatTreeParent(node)) {
+  for (
+    let node: Element | null = el;
+    node !== null;
+    node = flatTreeParent(node)
+  ) {
     if (matchesHardFloor(node)) {
       return 'masked';
     }
   }
-  for (let node: Element | null = el; node !== null; node = flatTreeParent(node)) {
+  for (
+    let node: Element | null = el;
+    node !== null;
+    node = flatTreeParent(node)
+  ) {
     const mask =
       node.hasAttribute(MASK_ATTR) || matchesAny(node, config.maskSelectors);
     if (mask) {

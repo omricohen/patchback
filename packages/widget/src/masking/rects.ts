@@ -1,7 +1,4 @@
-import {
-  classifyElement,
-  type ResolvedMaskingConfig,
-} from './policy.js';
+import { classifyElement, type ResolvedMaskingConfig } from './policy.js';
 
 /** Viewport-space redaction box (CSS pixels). */
 export interface RedactionRect {

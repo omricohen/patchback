@@ -50,8 +50,7 @@ export function createConsoleBuffer(
   const consoleTarget =
     options.console ?? (globalThis.console as Pick<Console, 'error' | 'warn'>);
   const windowTarget =
-    options.window ??
-    (typeof window !== 'undefined' ? window : undefined);
+    options.window ?? (typeof window !== 'undefined' ? window : undefined);
 
   const ring: ConsoleEntry[] = [];
   let recording = false;

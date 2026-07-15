@@ -35,6 +35,11 @@ export interface PatchbackWidgetConfig {
   persistThreads?: boolean;
   /** Render the floating launcher button (default true). */
   launcher?: boolean;
+  /**
+   * Status-poll intervals (ms). Defaults: fast 2500 (pre-triage), slow
+   * 15000 (post-triage). The playground tightens these for demo snappiness.
+   */
+  polling?: { fastMs?: number; slowMs?: number };
   /** CSS custom property overrides (`--patchback-*`). */
   theme?: Record<string, string>;
   zIndex?: number;

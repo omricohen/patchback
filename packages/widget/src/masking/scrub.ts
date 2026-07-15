@@ -46,7 +46,8 @@ const PASSES: readonly ScrubPass[] = [
   },
   // Emails — the "emails" in "masking (inputs, emails, selectors)".
   {
-    pattern: /[A-Za-z0-9._%+-]+@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*\.[A-Za-z]{2,}/g,
+    pattern:
+      /[A-Za-z0-9._%+-]+@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*\.[A-Za-z]{2,}/g,
     replacement: '[email]',
   },
   // Query strings inside URLs appearing in messages/stack frames.

@@ -2,19 +2,28 @@
   "name": "widget-playground",
   "version": "0.0.1",
   "private": true,
-  "description": "Dev harness for the Patchback widget",
+  "description": "Dev harness for the Patchback widget (fake-pipeline API + Vite pages)",
   "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
-    }
-  },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "dev": "node scripts/dev.mjs",
+    "build": "vite build",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.typecheck.json"
+  },
+  "dependencies": {
+    "@patchback/react": "workspace:*",
+    "@patchback/sdk": "workspace:*",
+    "@patchback/types": "workspace:*",
+    "@patchback/widget": "workspace:*"
+  },
+  "devDependencies": {
+    "@patchback/api": "workspace:*",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.3",
+    "playwright": "~1.60.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "vite": "^8.1.4"
   }
 }

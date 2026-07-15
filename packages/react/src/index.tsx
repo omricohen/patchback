@@ -36,9 +36,7 @@ export interface PatchbackProviderProps {
   children?: ReactNode;
 }
 
-export function PatchbackProvider(
-  props: PatchbackProviderProps,
-): ReactNode {
+export function PatchbackProvider(props: PatchbackProviderProps): ReactNode {
   const [widget, setWidget] = useState<PatchbackWidget | null>(null);
 
   useEffect(() => {
@@ -101,9 +99,7 @@ export function PatchbackLauncher(props: PatchbackLauncherProps): ReactNode {
   return (
     <button
       type="button"
-      {...(props.className !== undefined
-        ? { className: props.className }
-        : {})}
+      {...(props.className !== undefined ? { className: props.className } : {})}
       onClick={() => widget?.toggle()}
       disabled={widget === null}
     >

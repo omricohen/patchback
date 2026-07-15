@@ -157,12 +157,12 @@ describe('masking policy matrix', () => {
     expect(() =>
       createMaskingEngine({ maskSelectors: ['<<<not a selector'] }),
     ).toThrow(MaskingConfigError);
-    expect(() =>
-      createMaskingEngine({ ignoreSelectors: [''] }),
-    ).toThrow(MaskingConfigError);
-    expect(() =>
-      resolveMaskingConfig({ unmaskSelectors: [':::'] }),
-    ).toThrow(MaskingConfigError);
+    expect(() => createMaskingEngine({ ignoreSelectors: [''] })).toThrow(
+      MaskingConfigError,
+    );
+    expect(() => resolveMaskingConfig({ unmaskSelectors: [':::'] })).toThrow(
+      MaskingConfigError,
+    );
   });
 
   it('maskedTextOf: masked replaced, ignored dropped, input values never present', () => {

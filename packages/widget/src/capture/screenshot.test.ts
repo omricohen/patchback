@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import { createMaskingEngine } from '../masking/engine.js';
-import { paintRedactions, REDACTION_FILL, type Context2DLike } from './redact.js';
 import {
-  captureScreenshot,
-  type ScreenshotRenderer,
-} from './screenshot.js';
+  paintRedactions,
+  REDACTION_FILL,
+  type Context2DLike,
+} from './redact.js';
+import { captureScreenshot, type ScreenshotRenderer } from './screenshot.js';
 
 /**
  * Screenshot redaction unit proofs (jsdom): each layer is tested
@@ -64,13 +65,20 @@ function fakeCanvas(dataByType: Record<string, string>): HTMLCanvasElement {
   const ctx = {
     fillStyle: '' as string,
     fillRect(x: number, y: number, w: number, h: number) {
-      fillCalls.push({ x, y, width: w, height: h, fill: String(this.fillStyle) });
+      fillCalls.push({
+        x,
+        y,
+        width: w,
+        height: h,
+        fill: String(this.fillStyle),
+      });
     },
     drawImage() {},
   };
   Object.defineProperty(canvas, 'getContext', { value: () => ctx });
   Object.defineProperty(canvas, 'toDataURL', {
-    value: (type = 'image/png') => dataByType[type] ?? 'data:image/png;base64,AA==',
+    value: (type = 'image/png') =>
+      dataByType[type] ?? 'data:image/png;base64,AA==',
   });
   (canvas as unknown as { __fills: RecordedRect[] }).__fills = fillCalls;
   return canvas;
@@ -78,8 +86,7 @@ function fakeCanvas(dataByType: Record<string, string>): HTMLCanvasElement {
 
 describe('captureScreenshot', () => {
   it('collects rects from the live DOM, applies the clone hook, and paints layer 2', async () => {
-    document.body.innerHTML =
-      '<input id="pw" type="password"><p>copy</p>';
+    document.body.innerHTML = '<input id="pw" type="password"><p>copy</p>';
     const engine = createMaskingEngine();
     const canvas = fakeCanvas({
       'image/webp': 'data:image/webp;base64,SMALL',

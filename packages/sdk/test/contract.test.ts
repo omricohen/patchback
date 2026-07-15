@@ -215,9 +215,7 @@ describe('SDK ↔ API contract', () => {
       readToken: submitted.readToken,
     });
     expect(thread.triage?.classification).toBe('needs_clarification');
-    expect(thread.triage?.clarifyingQuestion).toBe(
-      'Which button do you mean?',
-    );
+    expect(thread.triage?.clarifyingQuestion).toBe('Which button do you mean?');
 
     // Reply with the ORIGINAL item's read token — the submitter's capability.
     const replied = await client.reply(

@@ -44,9 +44,7 @@ describe('widget hygiene', () => {
       const code = text
         .replace(/\/\*[\s\S]*?\*\//g, '')
         .replace(/\/\/[^\n]*/g, '');
-      expect(code, `http(s):// literal in ${file}`).not.toMatch(
-        /https?:\/\//,
-      );
+      expect(code, `http(s):// literal in ${file}`).not.toMatch(/https?:\/\//);
     }
   });
 
@@ -66,9 +64,7 @@ describe('widget hygiene', () => {
         expect(text).toMatch(/await import\(['"]@zumer\/snapdom['"]\)/);
         expect(text).not.toMatch(/^import[^;]*['"]@zumer\/snapdom['"]/m);
       } else {
-        expect(mentions, `unexpected snapdom reference in ${file}`).toBe(
-          false,
-        );
+        expect(mentions, `unexpected snapdom reference in ${file}`).toBe(false);
       }
     }
   });
