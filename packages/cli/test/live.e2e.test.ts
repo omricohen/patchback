@@ -4,18 +4,28 @@
  * throwaway repo, so it is env-gated and skips cleanly unless ALL of:
  *
  *   GITHUB_TOKEN         fine-grained PAT for the scratch repo
- *   PATCHBACK_TEST_REPO  scratch repo as "owner/repo" (a Node repo with a
- *                        README.md at the root works best)
+ *   PATCHBACK_TEST_REPO  scratch repo as "owner/repo"
  *   ANTHROPIC_API_KEY    for triage + the agent (the `claude` CLI must also
  *                        be installed and on PATH)
  *
  * Run: GITHUB_TOKEN=... PATCHBACK_TEST_REPO=you/scratch ANTHROPIC_API_KEY=... \
  *        pnpm --filter patchback test
  *
- * Everything the run creates (issue, branch, PR) is closed/deleted in
- * afterAll, best-effort.
+ * Flow: the test first SEEDS the scratch repo with a doc that contains a
+ * genuine defect (a "recieve" typo, pushed via the GitHub contents API), then
+ * submits a natural defect REPORT in user voice — describing what is wrong,
+ * not instructing file edits. Instruction-shaped feedback is exactly what the
+ * triage classifier must classify DOWN, so it cannot be the fixture.
+ *
+ * The PR-diff assertion doubles as a live regression test for the
+ * agent-spawn-isolation fix: the diff must touch ONLY the seeded file — in
+ * particular no `.a5c/` or other dot-directory artifacts that global
+ * hooks/plugins might write into the scratch clone.
+ *
+ * Everything the run creates (issue, branch, PR, seeded file) is
+ * closed/deleted/removed in afterAll, best-effort.
  */
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { MemoryQueue } from '@patchback/api';
 import { createPatchbackClient } from '@patchback/sdk';
@@ -26,6 +36,19 @@ const token = process.env.GITHUB_TOKEN;
 const testRepo = process.env.PATCHBACK_TEST_REPO;
 const anthropicKey = process.env.ANTHROPIC_API_KEY;
 const hasCredentials = Boolean(token && testRepo && anthropicKey);
+
+/** The seeded defect: a doc with an obvious spelling mistake. */
+const FIXTURE_PATH = 'docs/getting-started.md';
+const FIXTURE_CONTENT = [
+  '# Getting started',
+  '',
+  'Sign up with your email address. You will recieve a confirmation',
+  'email within a few minutes. Follow the link inside it to finish',
+  'setting up your account.',
+  '',
+  'Once confirmed, you can log in and create your first project.',
+  '',
+].join('\n');
 
 describe.skipIf(!hasCredentials)(
   'patchback dev live full-PR round-trip (env-gated)',
@@ -38,14 +61,18 @@ describe.skipIf(!hasCredentials)(
         `PATCHBACK_TEST_REPO must be "owner/repo", got "${testRepo}"`,
       );
     }
+    const base = `/repos/${owner}/${repo}`;
 
     let handle: DevHandle | undefined;
     let issueNumber: number | undefined;
     let prNumber: number | undefined;
     let branchName: string | undefined;
 
-    /** Raw calls for cleanup only. */
-    async function rawGitHub(method: string, path: string, body?: unknown) {
+    async function github(
+      method: string,
+      path: string,
+      body?: unknown,
+    ): Promise<{ status: number; json: unknown }> {
       const response = await fetch(`https://api.github.com${path}`, {
         method,
         headers: {
@@ -57,33 +84,84 @@ describe.skipIf(!hasCredentials)(
         },
         body: body !== undefined ? JSON.stringify(body) : undefined,
       });
-      if (!response.ok && response.status !== 404 && response.status !== 422) {
+      const text = await response.text();
+      return {
+        status: response.status,
+        json: text === '' ? undefined : (JSON.parse(text) as unknown),
+      };
+    }
+
+    /** Raw calls for cleanup only — warn instead of failing the teardown. */
+    async function cleanupCall(
+      method: string,
+      path: string,
+      body?: unknown,
+    ): Promise<void> {
+      const { status, json } = await github(method, path, body);
+      if (status >= 400 && status !== 404 && status !== 422) {
         console.warn(
-          `cleanup: ${method} ${path} -> ${response.status} ${await response.text()}`,
+          `cleanup: ${method} ${path} -> ${status} ${JSON.stringify(json)}`,
         );
       }
     }
 
+    /** Sha of FIXTURE_PATH on the default branch, if it exists. */
+    async function fixtureSha(): Promise<string | undefined> {
+      const { status, json } = await github(
+        'GET',
+        `${base}/contents/${FIXTURE_PATH}`,
+      );
+      if (status !== 200) return undefined;
+      return (json as { sha: string }).sha;
+    }
+
+    beforeAll(async () => {
+      // Seed the defect the feedback will report. Overwrites a leftover from
+      // a previous aborted run if one exists.
+      const existing = await fixtureSha();
+      const { status, json } = await github(
+        'PUT',
+        `${base}/contents/${FIXTURE_PATH}`,
+        {
+          message: 'test: seed live-fixture doc (contains a known typo)',
+          content: Buffer.from(FIXTURE_CONTENT, 'utf8').toString('base64'),
+          ...(existing !== undefined ? { sha: existing } : {}),
+        },
+      );
+      if (status !== 200 && status !== 201) {
+        throw new Error(
+          `could not seed ${FIXTURE_PATH}: ${status} ${JSON.stringify(json)}`,
+        );
+      }
+    }, 60_000);
+
     afterAll(async () => {
       await handle?.close();
-      const base = `/repos/${owner}/${repo}`;
       if (prNumber !== undefined) {
-        await rawGitHub('PATCH', `${base}/pulls/${prNumber}`, {
+        await cleanupCall('PATCH', `${base}/pulls/${prNumber}`, {
           state: 'closed',
         });
       }
       if (branchName !== undefined) {
-        await rawGitHub('DELETE', `${base}/git/refs/heads/${branchName}`);
+        await cleanupCall('DELETE', `${base}/git/refs/heads/${branchName}`);
       }
       if (issueNumber !== undefined) {
-        await rawGitHub('PATCH', `${base}/issues/${issueNumber}`, {
+        await cleanupCall('PATCH', `${base}/issues/${issueNumber}`, {
           state: 'closed',
+        });
+      }
+      // Restore the repo: remove the seeded doc from the default branch.
+      const sha = await fixtureSha();
+      if (sha !== undefined) {
+        await cleanupCall('DELETE', `${base}/contents/${FIXTURE_PATH}`, {
+          message: 'test: remove live-fixture doc',
+          sha,
         });
       }
     }, 120_000);
 
     it(
-      'feedback → triage → agent → real PR on the scratch repo',
+      'defect report → triage patchable → agent → real PR touching only the seeded file',
       { timeout: 15 * 60 * 1000 },
       async () => {
         const queue = new MemoryQueue();
@@ -101,20 +179,21 @@ describe.skipIf(!hasCredentials)(
           baseUrl: handle.address,
           apiKey: handle.keys.owner,
         });
+        // A natural defect report (user voice), NOT an instruction to edit
+        // files — the classifier correctly classifies instruction-shaped
+        // messages down, so this is what real patchable feedback looks like.
         const submitted = await client.submitFeedback({
           message:
-            'Fix this typo: add a line "Patchback live round-trip marker." ' +
-            'to the end of README.md (create README.md if it does not exist).',
+            'Spotted a spelling mistake in the getting started guide: the ' +
+            `first paragraph of ${FIXTURE_PATH} says "You will recieve a ` +
+            'confirmation email" — "recieve" should be "receive".',
         });
         await queue.onIdle(); // triage
 
         const triaged = await client.getJobStatus(submitted.jobId, {
           readToken: submitted.readToken,
         });
-        expect(['feedback.triaged', 'feedback.needs_clarification']).toContain(
-          triaged.state,
-        );
-        expect(triaged.state).toBe('feedback.triaged'); // must be startable
+        expect(triaged.state).toBe('feedback.triaged'); // patchable, startable
 
         const started = await client.startJob(submitted.jobId);
         issueNumber = started.issueNumber;
@@ -128,6 +207,38 @@ describe.skipIf(!hasCredentials)(
         expect(done.error).toBeUndefined();
         expect(done.state).toBe('pr.opened');
         expect(done.prUrl).toContain(`/${repo}/pull/`);
+
+        // The PR diff must touch ONLY the seeded file. This also live-pins
+        // the spawn-isolation fix: no `.a5c/**` (or any other dot-directory
+        // artifact from machine-global hooks/plugins) may appear in the PR.
+        const { status, json } = await github(
+          'GET',
+          `${base}/pulls/${prNumber}/files?per_page=100`,
+        );
+        expect(status).toBe(200);
+        const files = (json as Array<{ filename: string }>).map(
+          (file) => file.filename,
+        );
+        expect(files).toEqual([FIXTURE_PATH]);
+        for (const filename of files) {
+          expect(filename).not.toMatch(/(^|\/)\.a5c\//);
+          expect(filename.startsWith('.')).toBe(false);
+        }
+
+        // And the fix itself landed: the typo is gone on the PR branch.
+        const patch = await github(
+          'GET',
+          `${base}/contents/${FIXTURE_PATH}?ref=${encodeURIComponent(
+            branchName as string,
+          )}`,
+        );
+        expect(patch.status).toBe(200);
+        const fixed = Buffer.from(
+          (patch.json as { content: string }).content,
+          'base64',
+        ).toString('utf8');
+        expect(fixed).toContain('receive');
+        expect(fixed).not.toContain('recieve');
       },
     );
   },
