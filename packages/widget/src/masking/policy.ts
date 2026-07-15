@@ -39,6 +39,14 @@ export interface ResolvedMaskingConfig {
   scrubText: boolean;
 }
 
+/**
+ * The redaction color, shared by BOTH screenshot layers: layer 1 paints it
+ * as an inset box-shadow on masked/ignored clone elements, layer 2 paints
+ * it as canvas rects — so a layer-1-only capture is pixel-identical in
+ * color to the full pipeline (and testable as such).
+ */
+export const REDACTION_FILL = '#242a33';
+
 /** Markup-level controls — work with zero config, closest-ancestor semantics. */
 export const MASK_ATTR = 'data-patchback-mask';
 export const UNMASK_ATTR = 'data-patchback-unmask';

@@ -154,6 +154,34 @@ describe('applyMaskingToClone (screenshot layer 1)', () => {
     expect(m.style.getPropertyValue('border-image-source')).toBe('none');
   });
 
+  it('paints an opaque inset box-shadow on masked and ignored boxes (the effective background redaction)', () => {
+    // snapdom's resource pass rewrites url-bearing properties from the LIVE
+    // element AFTER the clone hook — `background-image: none` alone is
+    // clobbered. The inset shadow is a non-url property that paints over
+    // the background and under children, and survives that pipeline.
+    document.body.innerHTML =
+      '<div id="page">' +
+      '<div data-patchback-mask id="m" style="background-image: url(/secret.png)">x</div>' +
+      '<div data-patchback-ignore id="i" style="background-image: url(/secret2.png)">y</div>' +
+      '<p id="visible">plain</p>' +
+      '</div>';
+    const engine = createMaskingEngine();
+    const clone = (document.querySelector('#page') as Element).cloneNode(
+      true,
+    ) as Element;
+    engine.applyToClone(clone);
+    for (const id of ['#m', '#i']) {
+      const el = clone.querySelector(id) as HTMLElement;
+      const shadow = el.style.getPropertyValue('box-shadow');
+      expect(shadow, `${id} box-shadow`).toContain('inset');
+      expect(shadow).toContain('9999px');
+      expect(el.style.getPropertyPriority('box-shadow')).toBe('important');
+    }
+    // Visible elements are untouched.
+    const visible = clone.querySelector('#visible') as HTMLElement;
+    expect(visible.style.getPropertyValue('box-shadow')).toBe('');
+  });
+
   it('empties svg and strips video/audio sources inside masked subtrees', () => {
     document.body.innerHTML =
       '<div id="page"><section data-patchback-mask>' +

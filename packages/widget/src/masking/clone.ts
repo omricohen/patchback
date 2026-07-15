@@ -1,6 +1,7 @@
 import {
   classifyElement,
   isFormField,
+  REDACTION_FILL,
   type ResolvedMaskingConfig,
 } from './policy.js';
 
@@ -135,8 +136,11 @@ function stripVisualContent(el: Element): void {
     el.removeAttribute('data');
   }
 
-  // CSS image sources — inline with !important so they beat whatever
-  // style pipeline the renderer serializes (class CSS or style attrs).
+  // CSS image sources — inline with !important. NOT sufficient on its own:
+  // snapdom's resource-inlining pass rewrites url-bearing properties (at
+  // least background-image) from its LIVE-element style snapshot AFTER the
+  // afterClone hook, clobbering these (verified empirically against the
+  // serialized SVG). Kept as defense for renderers that honor the clone.
   const style = (el as HTMLElement | SVGElement).style;
   if (style !== undefined && typeof style.setProperty === 'function') {
     style.setProperty('background-image', 'none', 'important');
@@ -144,6 +148,18 @@ function stripVisualContent(el: Element): void {
     style.setProperty('mask-image', 'none', 'important');
     style.setProperty('-webkit-mask-image', 'none', 'important');
     style.setProperty('list-style-image', 'none', 'important');
+    // THE effective background redaction: an inset box-shadow with a huge
+    // spread paints OVER the background (color AND image) and UNDER child
+    // content, needs no positioning, and — being a non-url property —
+    // survives snapdom's style pipeline (empirically: layer-2-disabled
+    // captures raster the box 100% as REDACTION_FILL). Masked text/media
+    // above it are already stripped; unmask-marked descendants still paint
+    // on top, per the nearest-marker contract.
+    style.setProperty(
+      'box-shadow',
+      `inset 0 0 0 9999px ${REDACTION_FILL}`,
+      'important',
+    );
   }
 }
 
