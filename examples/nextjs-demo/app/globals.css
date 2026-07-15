@@ -1,0 +1,114 @@
+:root {
+  color-scheme: light;
+}
+
+body {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  margin: 0;
+  background: #f2f4f8;
+  color: #16202e;
+}
+
+.wrap {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 32px 20px 120px;
+}
+
+.page-header h1 {
+  font-size: 24px;
+  margin: 0;
+}
+
+.subtitle {
+  color: #51607a;
+  font-size: 13px;
+  margin: 4px 0 20px;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 14px;
+}
+
+.order-count {
+  font-size: 13px;
+  color: #51607a;
+}
+
+button {
+  font: inherit;
+  padding: 7px 14px;
+  border-radius: 7px;
+  border: 1px solid #c6d0de;
+  background: #fff;
+  cursor: pointer;
+}
+
+button.primary {
+  background: #2f6fed;
+  border-color: #2f6fed;
+  color: #fff;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  border: 1px solid #dbe2ec;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 9px 12px;
+  border-bottom: 1px solid #e8edf4;
+  font-size: 13px;
+}
+
+th {
+  background: #f7f9fc;
+}
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  text-transform: capitalize;
+  background: #eef1f6;
+}
+
+.badge-pending {
+  background: #fff3d6;
+}
+
+.badge-processing {
+  background: #e3ecff;
+}
+
+.badge-shipped {
+  background: #ddf5e4;
+}
+
+.badge-cancelled {
+  background: #fde3e3;
+}
+
+.patchback-setup-note {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  max-width: 340px;
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid #e3c96b;
+  border-radius: 10px;
+  background: #fffbe8;
+  font-size: 13px;
+  line-height: 1.5;
+}

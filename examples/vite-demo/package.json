@@ -1,0 +1,19 @@
+{
+  "name": "vite-demo",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Minimal vanilla Vite app embedding the Patchback widget",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.typecheck.json"
+  },
+  "dependencies": {
+    "@patchback/widget": "workspace:*"
+  },
+  "devDependencies": {
+    "vite": "^8.1.4"
+  }
+}
