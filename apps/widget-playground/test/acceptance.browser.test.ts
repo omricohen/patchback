@@ -41,10 +41,12 @@ interface SampleRegion {
   y: number;
   width: number;
   height: number;
-  /** Expected dominant color of the region in the decoded screenshot. */
+  /** Color to count matches against (within TOLERANCE). */
   color: { r: number; g: number; b: number };
-  /** Minimum fraction of pixels that must match (within TOLERANCE). */
-  minRatio: number;
+  /** Minimum fraction of pixels that must match `color`. */
+  minRatio?: number;
+  /** Maximum fraction of pixels allowed to match `color` (leak checks). */
+  maxRatio?: number;
 }
 
 interface SampleOutcome {
@@ -52,7 +54,8 @@ interface SampleOutcome {
   pixels: number;
   matching: number;
   offColors: string[];
-  minRatio: number;
+  minRatio?: number;
+  maxRatio?: number;
 }
 
 interface DecodedSample {
@@ -131,7 +134,12 @@ async function decodeAndSample(
           pixels,
           matching,
           offColors,
-          minRatio: region.minRatio,
+          ...(region.minRatio !== undefined
+            ? { minRatio: region.minRatio }
+            : {}),
+          ...(region.maxRatio !== undefined
+            ? { maxRatio: region.maxRatio }
+            : {}),
         };
       });
       return { width: img.naturalWidth, height: img.naturalHeight, results };
@@ -143,10 +151,13 @@ async function decodeAndSample(
 function assertRegions(sample: DecodedSample): void {
   for (const region of sample.results) {
     const ratio = region.matching / region.pixels;
-    expect(
-      ratio,
-      `region ${region.name}: ${region.matching}/${region.pixels} pixels match; off-samples ${region.offColors.join(' ')}`,
-    ).toBeGreaterThanOrEqual(region.minRatio);
+    const detail = `region ${region.name}: ${region.matching}/${region.pixels} pixels match; off-samples ${region.offColors.join(' ')}`;
+    if (region.minRatio !== undefined) {
+      expect(ratio, detail).toBeGreaterThanOrEqual(region.minRatio);
+    }
+    if (region.maxRatio !== undefined) {
+      expect(ratio, detail).toBeLessThanOrEqual(region.maxRatio);
+    }
   }
 }
 
@@ -422,24 +433,26 @@ describe.skipIf(!ENABLED)('playground browser acceptance', () => {
       page,
       dataUri,
       [
-        // Masked <img> (bright magenta in the DOM) → uniform redaction fill.
+        // Masked <img> (bright magenta in the DOM) → uniform redaction
+        // fill. inset(1): layer 2 rounds outward, so even the outermost
+        // sampled rows must be fill — a leading-edge sliver fails here.
         {
           name: 'masked-img',
-          ...inset(geometry.img),
+          ...inset(geometry.img, 1),
           color: FILL,
           minRatio: 0.99,
         },
         // Masked CSS background-image (bright orange) → uniform fill.
         {
           name: 'masked-bg',
-          ...inset(geometry.bg),
+          ...inset(geometry.bg, 1),
           color: FILL,
           minRatio: 0.99,
         },
         // Below-fold password input → uniform fill.
         {
           name: 'below-fold-password',
-          ...inset(geometry.pw),
+          ...inset(geometry.pw, 1),
           color: FILL,
           minRatio: 0.99,
         },
@@ -457,5 +470,110 @@ describe.skipIf(!ENABLED)('playground browser acceptance', () => {
     // The capture must be the viewport the user saw, not the full document.
     assertViewportSized(sampled);
     assertRegions(sampled);
+  }, 120_000);
+
+  it('layer 1 ALONE redacts masked CSS backgrounds and media (layer 2 disabled)', async () => {
+    // The two-layer guarantee, TESTED rather than asserted: with raster
+    // painting switched off via the test-only global (not reachable from
+    // public config), a capture must ALREADY contain no masked content —
+    // including CSS backgrounds, which snapdom re-inlines from the live
+    // element and which only the clone-stage inset shadow covers here.
+    await page.goto(PAGE_URL);
+    await page.locator('#fold-section').scrollIntoViewIfNeeded();
+    await page.evaluate(() => {
+      (
+        window as unknown as Record<string, unknown>
+      ).__PATCHBACK_TEST_ONLY_DISABLE_RASTER_REDACTION__ = true;
+    });
+    try {
+      const geometry = await page.evaluate(() => {
+        const box = (selector: string) => {
+          const el = document.querySelector(selector);
+          if (el === null) {
+            throw new Error(`missing fixture ${selector}`);
+          }
+          const rect = el.getBoundingClientRect();
+          return {
+            x: rect.x,
+            y: rect.y,
+            width: rect.width,
+            height: rect.height,
+          };
+        };
+        return {
+          img: box('#fold-masked-img'),
+          bg: box('#fold-bg-masked'),
+          control: box('#fold-control'),
+          pw: box('#fold-password'),
+        };
+      });
+
+      await page.click('.pb-launcher');
+      await page.fill('.pb-panel textarea', 'Layer-1-only redaction check');
+      await page.getByRole('button', { name: 'Attach screenshot' }).click();
+      await page.waitForSelector('[data-preview="screenshot"] img', {
+        timeout: 30_000,
+      });
+      await page
+        .getByRole('dialog')
+        .getByRole('button', { name: 'Send feedback' })
+        .click();
+      await waitForChipState('feedback.triaged');
+
+      const feedbackId = api.createdFeedbackIds.at(-1) as string;
+      const item = await api.store.getFeedback(feedbackId);
+      const dataUri = item?.capture?.screenshot?.dataUri ?? '';
+      expect(dataUri.startsWith('data:image/')).toBe(true);
+
+      const sampled = await decodeAndSample(
+        page,
+        dataUri,
+        [
+          // The masked CSS background must NOT be its source color…
+          {
+            name: 'masked-bg is not its source orange (layer 1 only)',
+            ...inset(geometry.bg),
+            color: { r: 0xff, g: 0x88, b: 0x00 },
+            maxRatio: 0.02,
+          },
+          // …and IS the redaction fill (the clone-stage inset shadow).
+          {
+            name: 'masked-bg is redaction fill (layer 1 only)',
+            ...inset(geometry.bg),
+            color: FILL,
+            minRatio: 0.95,
+          },
+          // The masked <img> must not leak its source magenta.
+          {
+            name: 'masked-img is not its source magenta (layer 1 only)',
+            ...inset(geometry.img),
+            color: { r: 0xff, g: 0x00, b: 0xaa },
+            maxRatio: 0.02,
+          },
+          // The password box is value-stripped + shadow-filled by layer 1.
+          {
+            name: 'password is redaction fill (layer 1 only)',
+            ...inset(geometry.pw),
+            color: FILL,
+            minRatio: 0.9,
+          },
+          // Unmasked content stays intact without layer 2 as well.
+          {
+            name: 'unmasked control stays green (layer 1 only)',
+            ...inset(geometry.control),
+            color: { r: 0x0a, g: 0x7d, b: 0x33 },
+            minRatio: 0.9,
+          },
+        ],
+        1280,
+      );
+      assertViewportSized(sampled);
+      assertRegions(sampled);
+    } finally {
+      await page.evaluate(() => {
+        delete (window as unknown as Record<string, unknown>)
+          .__PATCHBACK_TEST_ONLY_DISABLE_RASTER_REDACTION__;
+      });
+    }
   }, 120_000);
 });
