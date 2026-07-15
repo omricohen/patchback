@@ -72,9 +72,9 @@ describe('CORS with explicit allowed origins', () => {
     expect(response.statusCode).toBeLessThan(300);
     expect(response.headers['access-control-allow-origin']).toBe(APP_ORIGIN);
     // Bearer auth must survive the preflight.
-    expect(
-      String(response.headers['access-control-allow-methods']),
-    ).toContain('POST');
+    expect(String(response.headers['access-control-allow-methods'])).toContain(
+      'POST',
+    );
   });
 
   it('reflects the listed origin on an actual request', async () => {
