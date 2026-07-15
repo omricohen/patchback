@@ -74,6 +74,36 @@ export function renderDemoPage(root: HTMLElement): void {
           <p>This paragraph is ordinary visible copy.</p>
         </div>
       </div>
+
+      <div style="height: 1400px"></div>
+
+      <div class="card" id="fold-section">
+        <h2>Below the fold (scrolled-capture fixtures)</h2>
+        <p>
+          These exist for the scrolled-screenshot acceptance case: masked
+          MEDIA (an image and a CSS background) plus an unmasked control
+          block proving redaction lands only where it should.
+        </p>
+        <img
+          id="fold-masked-img"
+          data-patchback-mask
+          width="240"
+          height="120"
+          alt="masked fixture image"
+          src="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='240'%20height='120'%3E%3Crect%20width='240'%20height='120'%20fill='%23ff00aa'/%3E%3C/svg%3E"
+        />
+        <div
+          id="fold-bg-masked"
+          data-patchback-mask
+          style="width: 240px; height: 80px; margin-top: 8px; background-image: url(&quot;data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='240'%20height='80'%3E%3Crect%20width='240'%20height='80'%20fill='%23ff8800'/%3E%3C/svg%3E&quot;)"
+        ></div>
+        <div
+          id="fold-control"
+          style="width: 240px; height: 80px; margin-top: 8px; background: #0a7d33"
+        ></div>
+        <label for="fold-password">Below-fold password</label>
+        <input id="fold-password" type="password" value="SENTINEL-below-fold" />
+      </div>
     </div>
   `;
 

@@ -34,6 +34,131 @@ interface CloseableViteServer {
   close(): Promise<void>;
 }
 
+interface SampleRegion {
+  name: string;
+  /** Viewport-space CSS px, measured at capture time. */
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** Expected dominant color of the region in the decoded screenshot. */
+  color: { r: number; g: number; b: number };
+  /** Minimum fraction of pixels that must match (within TOLERANCE). */
+  minRatio: number;
+}
+
+interface SampleOutcome {
+  name: string;
+  pixels: number;
+  matching: number;
+  offColors: string[];
+  minRatio: number;
+}
+
+interface DecodedSample {
+  width: number;
+  height: number;
+  results: SampleOutcome[];
+}
+
+/** Inset a box so edge anti-aliasing never skews the uniformity check. */
+function inset(
+  box: { x: number; y: number; width: number; height: number },
+  by = 4,
+): { x: number; y: number; width: number; height: number } {
+  return {
+    x: box.x + by,
+    y: box.y + by,
+    width: Math.max(box.width - 2 * by, 1),
+    height: Math.max(box.height - 2 * by, 1),
+  };
+}
+
+/**
+ * Decode a screenshot data URI in the browser and sample pixel regions.
+ * Screenshots are VIEWPORT captures, so viewport-space CSS px map to image
+ * px via naturalWidth / viewportWidth.
+ */
+async function decodeAndSample(
+  page: Page,
+  dataUri: string,
+  regions: SampleRegion[],
+  viewportWidth: number,
+): Promise<DecodedSample> {
+  return page.evaluate(
+    async ({ uri, regs, vw, tolerance }) => {
+      const img = new Image();
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error('screenshot decode failed'));
+        img.src = uri;
+      });
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      if (ctx === null) {
+        throw new Error('no 2d context');
+      }
+      ctx.drawImage(img, 0, 0);
+      const scale = img.naturalWidth / vw;
+      const results = regs.map((region) => {
+        const data = ctx.getImageData(
+          Math.round(region.x * scale),
+          Math.round(region.y * scale),
+          Math.max(Math.round(region.width * scale), 1),
+          Math.max(Math.round(region.height * scale), 1),
+        ).data;
+        const pixels = data.length / 4;
+        let matching = 0;
+        const offColors: string[] = [];
+        for (let i = 0; i < data.length; i += 4) {
+          const r = data[i] as number;
+          const g = data[i + 1] as number;
+          const b = data[i + 2] as number;
+          if (
+            Math.abs(r - region.color.r) <= tolerance &&
+            Math.abs(g - region.color.g) <= tolerance &&
+            Math.abs(b - region.color.b) <= tolerance
+          ) {
+            matching += 1;
+          } else if (offColors.length < 5) {
+            offColors.push(`rgb(${r},${g},${b})`);
+          }
+        }
+        return {
+          name: region.name,
+          pixels,
+          matching,
+          offColors,
+          minRatio: region.minRatio,
+        };
+      });
+      return { width: img.naturalWidth, height: img.naturalHeight, results };
+    },
+    { uri: dataUri, regs: regions, vw: viewportWidth, tolerance: TOLERANCE },
+  );
+}
+
+function assertRegions(sample: DecodedSample): void {
+  for (const region of sample.results) {
+    const ratio = region.matching / region.pixels;
+    expect(
+      ratio,
+      `region ${region.name}: ${region.matching}/${region.pixels} pixels match; off-samples ${region.offColors.join(' ')}`,
+    ).toBeGreaterThanOrEqual(region.minRatio);
+  }
+}
+
+/** The screenshot must be a VIEWPORT capture, never the full document. */
+function assertViewportSized(sample: DecodedSample): void {
+  const aspect = sample.width / sample.height;
+  expect(
+    Math.abs(aspect - 1280 / 900),
+    `screenshot ${sample.width}x${sample.height} is not viewport-shaped — full-document raster leaked through`,
+  ).toBeLessThan(0.05);
+}
+
 describe.skipIf(!ENABLED)('playground browser acceptance', () => {
   let api: DevApi;
   let vite: CloseableViteServer;
@@ -176,73 +301,27 @@ describe.skipIf(!ENABLED)('playground browser acceptance', () => {
     expect(dataUri.startsWith('data:image/')).toBe(true);
     expect(dataUri.length).toBeLessThanOrEqual(524288);
 
-    const regions = [
-      { name: 'password', box: pwBox },
-      { name: 'ignored-card', box: ignoredBox },
-    ].map(({ name, box }) => ({
-      name,
-      x: (box?.x ?? 0) + 4,
-      y: (box?.y ?? 0) + 4,
-      width: Math.max((box?.width ?? 0) - 8, 1),
-      height: Math.max((box?.height ?? 0) - 8, 1),
-    }));
-
-    const sampled = await page.evaluate(
-      async ({ uri, regions: regs, viewportWidth, tolerance }) => {
-        const img = new Image();
-        await new Promise<void>((resolve, reject) => {
-          img.onload = () => resolve();
-          img.onerror = () => reject(new Error('screenshot decode failed'));
-          img.src = uri;
-        });
-        const canvas = document.createElement('canvas');
-        canvas.width = img.naturalWidth;
-        canvas.height = img.naturalHeight;
-        const ctx = canvas.getContext('2d');
-        if (ctx === null) {
-          throw new Error('no 2d context');
-        }
-        ctx.drawImage(img, 0, 0);
-        const scale = img.naturalWidth / viewportWidth;
-        return regs.map((region) => {
-          const data = ctx.getImageData(
-            Math.round(region.x * scale),
-            Math.round(region.y * scale),
-            Math.max(Math.round(region.width * scale), 1),
-            Math.max(Math.round(region.height * scale), 1),
-          ).data;
-          const pixels = data.length / 4;
-          let matching = 0;
-          const offColors: string[] = [];
-          for (let i = 0; i < data.length; i += 4) {
-            const r = data[i] as number;
-            const g = data[i + 1] as number;
-            const b = data[i + 2] as number;
-            if (
-              Math.abs(r - 0x24) <= tolerance &&
-              Math.abs(g - 0x2a) <= tolerance &&
-              Math.abs(b - 0x33) <= tolerance
-            ) {
-              matching += 1;
-            } else if (offColors.length < 5) {
-              offColors.push(`rgb(${r},${g},${b})`);
-            }
-          }
-          return { name: region.name, pixels, matching, offColors };
-        });
-      },
-      { uri: dataUri, regions, viewportWidth: 1280, tolerance: TOLERANCE },
+    const sampled = await decodeAndSample(
+      page,
+      dataUri,
+      [
+        {
+          name: 'password',
+          ...inset(pwBox ?? { x: 0, y: 0, width: 1, height: 1 }),
+          color: FILL,
+          minRatio: 0.99,
+        },
+        {
+          name: 'ignored-card',
+          ...inset(ignoredBox ?? { x: 0, y: 0, width: 1, height: 1 }),
+          color: FILL,
+          minRatio: 0.99,
+        },
+      ],
+      1280,
     );
-
-    for (const region of sampled) {
-      const ratio = region.matching / region.pixels;
-      expect(
-        ratio,
-        `region ${region.name}: ${region.matching}/${region.pixels} match fill; off-samples ${region.offColors.join(' ')}`,
-      ).toBeGreaterThanOrEqual(0.99);
-    }
-    // Reference sanity: FILL constant matches what we asserted against.
-    expect(FILL).toEqual({ r: 0x24, g: 0x2a, b: 0x33 });
+    assertViewportSized(sampled);
+    assertRegions(sampled);
 
     // --- Status walk: Start patch → queued/running → PR → merge →
     // closed. ---
@@ -286,5 +365,97 @@ describe.skipIf(!ENABLED)('playground browser acceptance', () => {
     // The reply mints a NEW job; polling switches to it and it advances.
     await waitForChipState('feedback.triaged');
     await page.waitForSelector('text=Triaged — ready for a patch');
+  }, 120_000);
+
+  it('redacts below-fold masked MEDIA in a SCROLLED capture (geometry regression)', async () => {
+    await page.goto(PAGE_URL);
+    await page.locator('#fold-section').scrollIntoViewIfNeeded();
+
+    // Viewport-space geometry AFTER scrolling — the exact coordinates the
+    // widget must redact at, far from document-space y.
+    const geometry = await page.evaluate(() => {
+      const box = (selector: string) => {
+        const el = document.querySelector(selector);
+        if (el === null) {
+          throw new Error(`missing fixture ${selector}`);
+        }
+        const rect = el.getBoundingClientRect();
+        return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+      };
+      return {
+        img: box('#fold-masked-img'),
+        bg: box('#fold-bg-masked'),
+        control: box('#fold-control'),
+        pw: box('#fold-password'),
+        scrollY: window.scrollY,
+      };
+    });
+    // The regression only exists when genuinely scrolled.
+    expect(geometry.scrollY).toBeGreaterThan(500);
+
+    await page.click('.pb-launcher');
+    await page.fill('.pb-panel textarea', 'Below-fold masked media check');
+    await page.getByRole('button', { name: 'Attach screenshot' }).click();
+    await page.waitForSelector('[data-preview="screenshot"] img', {
+      timeout: 30_000,
+    });
+    // The renderer scrolls the document to rasterize it; the widget must
+    // put the user back where they were.
+    expect(await page.evaluate(() => window.scrollY)).toBe(geometry.scrollY);
+    await page
+      .getByRole('dialog')
+      .getByRole('button', { name: 'Send feedback' })
+      .click();
+    await waitForChipState('feedback.triaged');
+
+    const feedbackId = api.createdFeedbackIds.at(-1) as string;
+    const item = await api.store.getFeedback(feedbackId);
+    expect(item).toBeDefined();
+    expect(JSON.stringify(item)).not.toContain('SENTINEL');
+
+    const shot = item?.capture?.screenshot;
+    expect(shot?.masked).toBe(true);
+    const dataUri = shot?.dataUri ?? '';
+    expect(dataUri.startsWith('data:image/')).toBe(true);
+
+    const sampled = await decodeAndSample(
+      page,
+      dataUri,
+      [
+        // Masked <img> (bright magenta in the DOM) → uniform redaction fill.
+        {
+          name: 'masked-img',
+          ...inset(geometry.img),
+          color: FILL,
+          minRatio: 0.99,
+        },
+        // Masked CSS background-image (bright orange) → uniform fill.
+        {
+          name: 'masked-bg',
+          ...inset(geometry.bg),
+          color: FILL,
+          minRatio: 0.99,
+        },
+        // Below-fold password input → uniform fill.
+        {
+          name: 'below-fold-password',
+          ...inset(geometry.pw),
+          color: FILL,
+          minRatio: 0.99,
+        },
+        // The UNMASKED control block must stay green: proves the crop is
+        // aligned and no redaction fill smeared onto innocent pixels.
+        {
+          name: 'unmasked-control',
+          ...inset(geometry.control),
+          color: { r: 0x0a, g: 0x7d, b: 0x33 },
+          minRatio: 0.9,
+        },
+      ],
+      1280,
+    );
+    // The capture must be the viewport the user saw, not the full document.
+    assertViewportSized(sampled);
+    assertRegions(sampled);
   }, 120_000);
 });
