@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -10,7 +10,12 @@ import type {
   ExecutionResult,
   GuardedTaskBrief,
 } from '@patchback/agent-core';
-import { createBriefFromTriagedFeedback, runGit } from '@patchback/agent-core';
+import {
+  createBriefFromTriagedFeedback,
+  diffNumstat,
+  runGit,
+  totalChangedLines,
+} from '@patchback/agent-core';
 import type { FeedbackItem, Job } from '@patchback/types';
 
 import { createFakeGitHubClient } from './testing.js';
@@ -217,6 +222,135 @@ describe('createDefaultPatchPipeline', () => {
       githubClient: github,
       repoSource: sourceRepo,
       scratchBaseDir: path.join(baseDir, 'scratch-empty'),
+    });
+    const result = await pipeline.run(makeBrief(), makeJob());
+    expect(result).toEqual({ ok: false, error: 'agent changed no files' });
+    expect(github.callLog).toEqual([]);
+  });
+
+  it('never commits hook artifacts from new dot-dirs (real sweep in the adapter)', async () => {
+    const github = createFakeGitHubClient();
+    const warnings: string[] = [];
+    // Adapter that behaves like the real one: something on the machine
+    // (a global hook/plugin) writes state into the scratch clone alongside
+    // the actual change, and the adapter reports the SWEPT diff.
+    const adapter = makeAdapter(async (ctx) => {
+      await mkdir(path.join(ctx.workDir, '.a5c', 'cache'), {
+        recursive: true,
+      });
+      await writeFile(
+        path.join(ctx.workDir, '.a5c', 'cache', 'foo.json'),
+        '{"cwd":"/Users/example-user/private/project"}\n',
+        'utf8',
+      );
+      await writeFile(
+        path.join(ctx.workDir, 'greeting.txt'),
+        'Hello world\n',
+        'utf8',
+      );
+      const changedFiles = await diffNumstat(ctx.workDir, {
+        warn: (message) => warnings.push(message),
+      });
+      return {
+        success: true,
+        changedFiles,
+        totalChangedLines: totalChangedLines(changedFiles),
+      };
+    });
+    const pipeline = createDefaultPatchPipeline({
+      adapter,
+      githubClient: github,
+      repoSource: sourceRepo,
+      baseBranch: 'main',
+      scratchBaseDir: path.join(baseDir, 'scratch-artifacts'),
+      log: (message) => warnings.push(message),
+    });
+    const result = await pipeline.run(makeBrief(), makeJob());
+
+    expect(result.ok).toBe(true);
+    expect(github.commits).toHaveLength(1);
+    expect(github.commits[0]?.files).toEqual([
+      { path: 'greeting.txt', content: 'Hello world\n' },
+    ]);
+    expect(warnings.join('\n')).toContain('.a5c/');
+  });
+
+  it('filters dot-dir artifacts even when the adapter reports them (second layer)', async () => {
+    const github = createFakeGitHubClient();
+    const warnings: string[] = [];
+    // Adapter that does NOT sweep — it hands the artifact path straight to
+    // the pipeline. The commit path must still refuse it.
+    const adapter = makeAdapter(async (ctx) => {
+      await mkdir(path.join(ctx.workDir, '.a5c'), { recursive: true });
+      await writeFile(
+        path.join(ctx.workDir, '.a5c', 'state.json'),
+        '{}\n',
+        'utf8',
+      );
+      await writeFile(
+        path.join(ctx.workDir, 'greeting.txt'),
+        'Hello world\n',
+        'utf8',
+      );
+      return {
+        success: true,
+        changedFiles: [
+          { path: 'greeting.txt', additions: 1, deletions: 1, binary: false },
+          {
+            path: '.a5c/state.json',
+            additions: 1,
+            deletions: 0,
+            binary: false,
+          },
+        ],
+        totalChangedLines: 3,
+      };
+    });
+    const pipeline = createDefaultPatchPipeline({
+      adapter,
+      githubClient: github,
+      repoSource: sourceRepo,
+      baseBranch: 'main',
+      scratchBaseDir: path.join(baseDir, 'scratch-artifacts-2'),
+      log: (message) => warnings.push(message),
+    });
+    const result = await pipeline.run(makeBrief(), makeJob());
+
+    expect(result.ok).toBe(true);
+    expect(github.commits[0]?.files).toEqual([
+      { path: 'greeting.txt', content: 'Hello world\n' },
+    ]);
+    expect(warnings.join('\n')).toContain('.a5c/state.json');
+  });
+
+  it('an all-artifact change set fails instead of opening an empty PR', async () => {
+    const github = createFakeGitHubClient();
+    const adapter = makeAdapter(async (ctx) => {
+      await mkdir(path.join(ctx.workDir, '.a5c'), { recursive: true });
+      await writeFile(
+        path.join(ctx.workDir, '.a5c', 'state.json'),
+        '{}\n',
+        'utf8',
+      );
+      return {
+        success: true,
+        changedFiles: [
+          {
+            path: '.a5c/state.json',
+            additions: 1,
+            deletions: 0,
+            binary: false,
+          },
+        ],
+        totalChangedLines: 1,
+      };
+    });
+    const pipeline = createDefaultPatchPipeline({
+      adapter,
+      githubClient: github,
+      repoSource: sourceRepo,
+      scratchBaseDir: path.join(baseDir, 'scratch-artifacts-3'),
+      log: () => {},
     });
     const result = await pipeline.run(makeBrief(), makeJob());
     expect(result).toEqual({ ok: false, error: 'agent changed no files' });

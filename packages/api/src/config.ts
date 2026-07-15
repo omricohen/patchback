@@ -172,5 +172,6 @@ export function resolvePipeline(config: ApiConfig): PatchPipeline {
     ...(config.baseBranch !== undefined
       ? { baseBranch: config.baseBranch }
       : {}),
+    ...(config.log !== undefined ? { log: config.log } : {}),
   });
 }
