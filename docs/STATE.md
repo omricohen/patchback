@@ -1,5 +1,38 @@
 # STATE — where we left off
 
+_Last updated: 2026-07-15 (orchestration run closed)_
+
+## Build run: COMPLETE
+
+All 10 BUILD_PLAN phases merged to `main` and pushed to
+github.com/omricohen/patchback (private). Release readiness: **READY, no
+engineering blockers** — see the report at
+`.a5c/runs/01KX6GMZ9TJBCR1RH3CCNMM77E/artifacts/release-readiness.md`
+(gitignored; regenerate insights from .claude/ logs if absent).
+
+Live-proven: triage evals ≥90% + injection gate; two full feedback→PR
+round-trips with the real agent on omricohen/testingPatchBack; masking
+pixel-verified across 3 adversarial rounds; agent-spawn isolation fixed.
+
+## Next: the 10 human-only launch items (in order)
+
+1. Confirm ocohen@gmail.com as public author email (66 commits)
+2. Private client-term sweep (tree + history)
+3. docs/SPEC.md decision (original vs provisional)
+4. Demo GIF per docs/demo-flow.md
+5. npm login + pnpm -r publish
+6. Clean-machine npx verify → real PR
+7. Stranger's-repo gauntlet
+8. Timed quickstart by someone else
+9. Repo settings (description/topics/social/vuln reporting)
+10. Flip public (move 'No GitHub remote' issue to Resolved then)
+
+---
+
+# Previous state (phase 10 session)
+
+
+
 _Last updated: 2026-07-15_
 
 ## Current phase
