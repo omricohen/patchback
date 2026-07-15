@@ -40,15 +40,15 @@ function recordingContext(): { ctx: Context2DLike; rects: RecordedRect[] } {
 }
 
 describe('paintRedactions (screenshot layer 2)', () => {
-  it('paints exactly one opaque box per rect, with a 1px safety bleed', () => {
+  it('paints one opaque box per rect: 1 CSS px bleed, outward rounding, 1 device px outset', () => {
     const { ctx, rects } = recordingContext();
     paintRedactions(ctx, [
       { x: 10, y: 20, width: 100, height: 30 },
       { x: 0, y: 0, width: 5, height: 5 },
     ]);
     expect(rects).toEqual([
-      { x: 9, y: 19, width: 102, height: 32, fill: REDACTION_FILL },
-      { x: -1, y: -1, width: 7, height: 7, fill: REDACTION_FILL },
+      { x: 8, y: 18, width: 104, height: 34, fill: REDACTION_FILL },
+      { x: -2, y: -2, width: 9, height: 9, fill: REDACTION_FILL },
     ]);
   });
 
@@ -56,8 +56,27 @@ describe('paintRedactions (screenshot layer 2)', () => {
     const { ctx, rects } = recordingContext();
     paintRedactions(ctx, [{ x: 10, y: 10, width: 50, height: 20 }], 2);
     expect(rects).toEqual([
-      { x: 18, y: 18, width: 104, height: 44, fill: REDACTION_FILL },
+      { x: 17, y: 17, width: 106, height: 46, fill: REDACTION_FILL },
     ]);
+  });
+
+  it('never under-covers fractional rects: edges round OUTWARD (sliver regression)', () => {
+    // Fractional geometry is the norm (scrollIntoView offsets, sub-pixel
+    // layout). A fill that rounds inward leaks a ~1 device px content
+    // sliver at the leading edge.
+    const { ctx, rects } = recordingContext();
+    paintRedactions(ctx, [{ x: 217.5, y: 620.47, width: 240, height: 80 }]);
+    const painted = rects[0] as RecordedRect;
+    // Painted box strictly contains the bled CSS rect on every edge.
+    expect(painted.x).toBeLessThanOrEqual(217.5 - 1);
+    expect(painted.y).toBeLessThanOrEqual(620.47 - 1);
+    expect(painted.x + painted.width).toBeGreaterThanOrEqual(217.5 + 240 + 1);
+    expect(painted.y + painted.height).toBeGreaterThanOrEqual(620.47 + 80 + 1);
+    // Integer device-pixel coordinates — no fractional fills to antialias.
+    expect(Number.isInteger(painted.x)).toBe(true);
+    expect(Number.isInteger(painted.y)).toBe(true);
+    expect(Number.isInteger(painted.width)).toBe(true);
+    expect(Number.isInteger(painted.height)).toBe(true);
   });
 });
 
@@ -165,6 +184,44 @@ describe('captureScreenshot', () => {
     expect(excluded).toContain('[data-patchback-widget]');
   });
 
+  it('the TEST-ONLY global disables layer-2 painting (and only that)', async () => {
+    document.body.innerHTML = '<input id="pw" type="password">';
+    const engine = createMaskingEngine();
+    const canvas = fakeCanvas({ 'image/webp': 'data:image/webp;base64,AA==' });
+    let cloneMasked = false;
+    const renderer: ScreenshotRenderer = {
+      async render(target, options) {
+        const clone = target.cloneNode(true) as Element;
+        options.onClone(clone);
+        cloneMasked =
+          clone
+            .querySelector('#pw')
+            ?.getAttribute('style')
+            ?.includes('inset') ?? false;
+        return canvas;
+      },
+    };
+    const scope = globalThis as {
+      __PATCHBACK_TEST_ONLY_DISABLE_RASTER_REDACTION__?: unknown;
+    };
+    try {
+      scope.__PATCHBACK_TEST_ONLY_DISABLE_RASTER_REDACTION__ = true;
+      const result = await captureScreenshot({
+        engine,
+        renderer,
+        getRect: () => ({ x: 10, y: 10, width: 100, height: 30 }),
+      });
+      expect(result.ok).toBe(true);
+      // Layer 2 skipped…
+      const fills = (canvas as unknown as { __fills: RecordedRect[] }).__fills;
+      expect(fills).toHaveLength(0);
+      // …but layer 1 still ran on the clone.
+      expect(cloneMasked).toBe(true);
+    } finally {
+      delete scope.__PATCHBACK_TEST_ONLY_DISABLE_RASTER_REDACTION__;
+    }
+  });
+
   it('paints scroll-correct positions on a full-document raster (geometry regression)', async () => {
     // Scenario: 768-tall viewport, page scrolled 1700px down, full-document
     // raster 2400px tall. A masked element visible at viewport y=50 lives
@@ -195,12 +252,12 @@ describe('captureScreenshot', () => {
     expect(fills).toHaveLength(1);
     // jsdom cannot create the crop canvas (no 2D context), so the paint
     // falls back to the full raster with rects translated into body space:
-    // x = 100 - 12, y = 50 - (-1688) — plus the 1px bleed.
+    // x = 100 - 12, y = 50 - (-1688) — plus bleed and outward rounding.
     expect(fills[0]).toEqual({
-      x: 87,
-      y: 1737,
-      width: 202,
-      height: 32,
+      x: 86,
+      y: 1736,
+      width: 204,
+      height: 34,
       fill: REDACTION_FILL,
     });
   });

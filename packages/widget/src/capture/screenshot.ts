@@ -171,7 +171,9 @@ export async function captureScreenshot(
   if (ctx === null) {
     return { ok: false, reason: 'render_failed' };
   }
-  paintRedactions(ctx, rects, scale);
+  if (!rasterRedactionDisabledForTests()) {
+    paintRedactions(ctx, rects, scale);
+  }
 
   // Downscale before encoding if oversized.
   const scaled = downscale(view, maxWidth, doc);
@@ -264,6 +266,24 @@ function downscale(
   }
   ctx.drawImage(canvas, 0, 0, scaled.width, scaled.height);
   return scaled;
+}
+
+/**
+ * TEST-ONLY kill switch for layer 2, so the acceptance suite can prove the
+ * two-layer guarantee (a layer-1-only capture must ALREADY contain no
+ * masked content). Deliberately NOT part of PatchbackWidgetConfig — it is
+ * reachable only by planting a namespaced global, which the browser test
+ * injects and no documented surface exposes. Never set this in an
+ * embedding app: it removes a safety layer.
+ */
+function rasterRedactionDisabledForTests(): boolean {
+  return (
+    (
+      globalThis as {
+        __PATCHBACK_TEST_ONLY_DISABLE_RASTER_REDACTION__?: unknown;
+      }
+    ).__PATCHBACK_TEST_ONLY_DISABLE_RASTER_REDACTION__ === true
+  );
 }
 
 async function loadDefaultRenderer(): Promise<ScreenshotRenderer> {
