@@ -103,4 +103,106 @@ describe('applyMaskingToClone (screenshot layer 1)', () => {
     expect(clone.outerHTML).toContain('fine-to-show');
     expect(clone.outerHTML).toContain('copy');
   });
+
+  it('strips img/source media inside masked subtrees — src, srcset, lazy attrs', () => {
+    document.body.innerHTML =
+      '<div id="page"><div data-patchback-mask>' +
+      '<img id="i" src="/SENTINEL-photo.png" srcset="/SENTINEL-photo@2x.png 2x" data-src="/SENTINEL-lazy.png">' +
+      '<picture><source srcset="/SENTINEL-source.webp"><img src="/SENTINEL-pic.png"></picture>' +
+      '</div></div>';
+    const engine = createMaskingEngine();
+    const clone = (document.querySelector('#page') as Element).cloneNode(
+      true,
+    ) as Element;
+    engine.applyToClone(clone);
+    expect(clone.outerHTML).not.toContain('SENTINEL');
+    expect(clone.querySelector('#i')?.getAttribute('src')).toBeNull();
+    expect(clone.querySelector('source')?.getAttribute('srcset')).toBeNull();
+  });
+
+  it("strips an ignored element's OWN media and background — not just its children", () => {
+    document.body.innerHTML =
+      '<div id="page">' +
+      '<img data-patchback-ignore id="lone" src="/SENTINEL-avatar.png">' +
+      '<div data-patchback-ignore id="bg" style="background-image: url(/SENTINEL-bg.png)">x</div>' +
+      '</div>';
+    const engine = createMaskingEngine();
+    const clone = (document.querySelector('#page') as Element).cloneNode(
+      true,
+    ) as Element;
+    engine.applyToClone(clone);
+    expect(clone.outerHTML).not.toContain('SENTINEL');
+    const bg = clone.querySelector('#bg') as HTMLElement;
+    expect(bg.style.getPropertyValue('background-image')).toBe('none');
+    expect(bg.style.getPropertyPriority('background-image')).toBe('important');
+  });
+
+  it('neutralizes background/border/mask image sources on masked elements with !important', () => {
+    document.body.innerHTML =
+      '<div id="page"><div data-patchback-mask id="m" ' +
+      'style="background-image: url(/SENTINEL-bg.png); border-image-source: url(/SENTINEL-border.png)">' +
+      'text</div></div>';
+    const engine = createMaskingEngine();
+    const clone = (document.querySelector('#page') as Element).cloneNode(
+      true,
+    ) as Element;
+    engine.applyToClone(clone);
+    expect(clone.outerHTML).not.toContain('SENTINEL');
+    const m = clone.querySelector('#m') as HTMLElement;
+    expect(m.style.getPropertyValue('background-image')).toBe('none');
+    expect(m.style.getPropertyPriority('background-image')).toBe('important');
+    expect(m.style.getPropertyValue('border-image-source')).toBe('none');
+  });
+
+  it('empties svg and strips video/audio sources inside masked subtrees', () => {
+    document.body.innerHTML =
+      '<div id="page"><section data-patchback-mask>' +
+      '<svg viewBox="0 0 10 10"><text>SENTINEL-svg</text><rect width="10" height="10"></rect></svg>' +
+      '<video src="/SENTINEL-video.mp4" poster="/SENTINEL-poster.png">' +
+      '<source src="/SENTINEL-inner.mp4"></video>' +
+      '</section></div>';
+    const engine = createMaskingEngine();
+    const clone = (document.querySelector('#page') as Element).cloneNode(
+      true,
+    ) as Element;
+    engine.applyToClone(clone);
+    expect(clone.outerHTML).not.toContain('SENTINEL');
+    expect(clone.querySelector('svg')?.childNodes).toHaveLength(0);
+    expect(clone.querySelector('video')?.getAttribute('src')).toBeNull();
+    expect(clone.querySelector('video')?.getAttribute('poster')).toBeNull();
+  });
+
+  it('leaves media in UNMASKED descendants of a masked container intact', () => {
+    document.body.innerHTML =
+      '<div id="page"><div data-patchback-mask>' +
+      '<img src="/secret.png">' +
+      '<div data-patchback-unmask><img id="ok" src="/public-logo.png"></div>' +
+      '</div></div>';
+    const engine = createMaskingEngine();
+    const clone = (document.querySelector('#page') as Element).cloneNode(
+      true,
+    ) as Element;
+    engine.applyToClone(clone);
+    expect(clone.outerHTML).not.toContain('secret.png');
+    expect(clone.querySelector('#ok')?.getAttribute('src')).toBe(
+      '/public-logo.png',
+    );
+  });
+
+  it('leaves media outside masked/ignored zones untouched', () => {
+    document.body.innerHTML =
+      '<div id="page"><img id="hero" src="/hero.png" ' +
+      'style="background-image: url(/tile.png)"><p>copy</p></div>';
+    const engine = createMaskingEngine();
+    const clone = (document.querySelector('#page') as Element).cloneNode(
+      true,
+    ) as Element;
+    engine.applyToClone(clone);
+    expect(clone.querySelector('#hero')?.getAttribute('src')).toBe('/hero.png');
+    expect(
+      (clone.querySelector('#hero') as HTMLElement).style.getPropertyValue(
+        'background-image',
+      ),
+    ).toContain('tile.png');
+  });
 });
