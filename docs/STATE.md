@@ -4,11 +4,49 @@ _Last updated: 2026-07-15_
 
 ## Current phase
 
-**Phase 8 (CLI: `npx patchback dev`) — CODE DONE** on branch `phase-8-cli`
-(not merged, not pushed — Omri's call). Phase 7 (`phase-7-widget-sdk`) was
-merged to main before this phase started. Phase 2 (extraction pass) still
-pending source material in `extraction-inbox/`. Next up: **Phase 9 —
-examples, docs, demo** (or merge/review of this branch first).
+**Phase 8 (CLI: `npx patchback dev`) — DONE, verifier findings fixed
+(attempt 2), LIVE ROUND-TRIP GREEN** on branch `phase-8-cli` (not merged,
+not pushed — Omri's call). Phase 7 (`phase-7-widget-sdk`) was merged to
+main before this phase started. Phase 2 (extraction pass) still pending
+source material in `extraction-inbox/`. Next up: **Phase 9 — examples,
+docs, demo** (or merge/review of this branch first).
+
+## Phase 8 attempt 2 — verifier findings fixed (2026-07-15)
+
+Two critical findings from the phase-8 review, both fixed and verified:
+
+1. **Agent-spawn isolation (privacy).** The adapter used to spawn `claude`
+   inheriting the machine's FULL global config; a globally installed plugin
+   hook wrote `.a5c/` state (with local absolute paths) into the scratch
+   clone, and the intent-to-add sweep published it into a real PR. Fixed
+   with defense in depth, all test-pinned:
+   - Spawn isolation: per-job empty `CLAUDE_CONFIG_DIR` (mkdtemp, deleted
+     after the run), allowlisted env (PATH/HOME/locale +
+     `ANTHROPIC_API_KEY` passthrough; `runProcess` gained
+     `inheritEnv: false`), and `--bare --strict-mcp-config` appended
+     (`DEFAULT_ISOLATION_FLAGS`, overridable; env layer is always on).
+     Note: `--bare` means agent auth is strictly `ANTHROPIC_API_KEY`.
+   - Sweep filter: `diffNumstat` excludes any newly appearing top-level
+     dot-directory absent from the base commit, with a warning
+     (`listNewTopLevelDotDirs` in agent-core git.ts).
+   - Commit-path filter (second layer): the default pipeline re-checks and
+     refuses to commit files under such directories even if an adapter
+     reports them, logging via the new `DefaultPipelineOptions.log` seam
+     (wired from `ApiConfig.log`).
+2. **Live e2e fixture.** The old canned message was instruction-shaped and
+   the real classifier correctly triaged it DOWN — the test could never
+   pass live. Rewritten: the test seeds `docs/getting-started.md` with a
+   real typo via the GitHub contents API, submits a natural user-voice
+   defect report, asserts triage → patchable → real agent → real PR whose
+   diff touches ONLY the seeded file (zero dot-dir artifacts — the live pin
+   for finding 1) and actually fixes the typo, then cleans everything up.
+
+**Live run result (2026-07-15):** GREEN against omricohen/testingPatchBack
+— full suite 58/58 with the live test included; PR #8 opened by the real
+agent with exactly `docs/getting-started.md` +1/−1; PR/issue closed,
+branch and seeded file removed by cleanup. Keyless, the suite is 57
+passed + 1 skipped (live gate skips cleanly). Root gate green:
+`pnpm lint && pnpm typecheck && pnpm test && pnpm build` + `format:check`.
 
 ## What's done (Phase 8)
 
@@ -70,25 +108,25 @@ examples, docs, demo** (or merge/review of this branch first).
     config never contains secrets, bad-token re-prompt, offline, gitignore).
   - Live full-PR round-trip env-gated behind `GITHUB_TOKEN` +
     `PATCHBACK_TEST_REPO` + `ANTHROPIC_API_KEY` (also needs the `claude`
-    binary), self-cleaning (closes PR/issue, deletes branch). **Verified to
-    skip cleanly this session** (no credentials configured) — a live run
-    has NOT happened yet (logged in OPEN_ISSUES).
+    binary), self-cleaning (closes PR/issue, deletes branch, removes the
+    seeded fixture file). **Ran GREEN with real credentials on 2026-07-15**
+    (see "Phase 8 attempt 2" above).
 - Gate green: `pnpm lint && pnpm typecheck && pnpm test && pnpm build` and
   `pnpm format:check`.
 
 ## Next concrete step
 
-1. Review + merge `phase-8-cli`.
-2. Run the live round-trip once with real credentials
-   (`GITHUB_TOKEN=… PATCHBACK_TEST_REPO=… ANTHROPIC_API_KEY=… pnpm --filter
-patchback test`) and record the result.
-3. Phase 9 — `examples/nextjs-demo` + `examples/vite-demo`, README
+1. Review + merge `phase-8-cli` (live round-trip is green; findings fixed).
+2. Phase 9 — `examples/nextjs-demo` + `examples/vite-demo`, README
    quickstart against reality, demo GIF script.
-4. Still pending: live triage eval run (`ANTHROPIC_API_KEY`), Phase 2
-   extraction inbox.
+3. Still pending: Phase 2 extraction inbox.
 
 ## Context to pick up cleanly
 
+- Attempt-2 decisions in `.claude/DECISIONS.md` (2026-07-15): agent-spawn
+  isolation posture (flags + env + double sweep filter) and the
+  seeded-defect live-fixture rule. Residual watch item in OPEN_ISSUES:
+  the flag layer needs `claude` CLI >= 2.1 (`--bare`).
 - Phase 8 decisions in `.claude/DECISIONS.md` (dated 2026-07-15): config
   split (secrets in .env / settings in annotation-free patchback.config.ts),
   store-decorator log streaming + secret scrubbing, CORS posture, PR
