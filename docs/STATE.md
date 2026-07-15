@@ -4,9 +4,9 @@ _Last updated: 2026-07-15_
 
 ## Current phase
 
-**Phase 7 (Widget + React wrapper + SDK) — CODE DONE** on branch
-`phase-7-widget-sdk` (not merged, not pushed — Omri's call), implemented
-per the approved plan
+**Phase 7 (Widget + React wrapper + SDK) — CODE DONE (attempt 2)** on
+branch `phase-7-widget-sdk` (not merged, not pushed — Omri's call),
+implemented per the approved plan
 (`.a5c/runs/01KX6GMZ9TJBCR1RH3CCNMM77E/artifacts/phase-7-plan.md`), all
 open questions resolved as approved (picker visible by default, message
 verbatim, snapdom, `/testing` subpath, playwright infra, Start-patch
@@ -14,6 +14,37 @@ button in-widget, query-stripped URL default).
 Phase 2 (extraction pass) still pending source material in
 `extraction-inbox/`. Next up: **Phase 8 — CLI `npx patchback dev`** (or
 merge/review of this branch first).
+
+## Attempt-2 fixes (verifier rejection of attempt 1)
+
+The verifier empirically falsified the screenshot redaction geometry:
+snapdom rasters the FULL document (and scrolls the page to the top
+mid-capture, unrestored) while layer-2 rects were viewport-space — on a
+scrolled page redaction painted at wrong positions and masked MEDIA
+(img/canvas/svg/video/background-image) leaked through layer 1 entirely.
+Fixed and re-proven:
+
+- Clone stage strips media + CSS image sources in masked/ignored
+  subtrees (incl. the ignored element's OWN background); unmask-marked
+  descendants stay intact. Unit-pinned in `clone.test.ts`.
+- All live geometry (body rect, scroll, viewport, rects) is measured
+  BEFORE rendering; the raster is cropped to the viewport
+  (`computeViewportCrop`, dpr-safe), rects painted on the crop, scroll
+  restored after the renderer's reset. Unit-pinned (incl. a scrolled
+  fake-raster regression test) + pixel-proven.
+- Acceptance suite gained: a SCROLLED below-fold case (masked img,
+  masked CSS background, below-fold password uniformly filled; an
+  adjacent UNMASKED control keeps its color → crop alignment + no
+  misplaced fill), a viewport-shape assertion on every screenshot, and a
+  scroll-restore assertion. All 3 browser tests green locally.
+- snapdom's vendored fonts.gstatic.com icon-font URLs are disabled at
+  runtime (`__SNAPDOM_ICON_FONTS__` override before module eval);
+  hygiene tests now also scan the shipped IIFE bundle against an origin
+  allowlist (skips with a notice if dist isn't built; enforced in the CI
+  browser job).
+- Docs corrected via SUPERSEDING DECISIONS entries (past entries kept
+  per house rules) + README screenshot contract rewritten (viewport
+  capture, media stripping, no-phone-home note).
 
 ## What's done (Phase 7)
 
