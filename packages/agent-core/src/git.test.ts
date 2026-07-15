@@ -165,9 +165,7 @@ describe('git helpers', () => {
       const files = await diffNumstat(workDir, {
         warn: (message) => warnings.push(message),
       });
-      expect(files.map((file) => file.path)).toEqual([
-        '.config/settings.json',
-      ]);
+      expect(files.map((file) => file.path)).toEqual(['.config/settings.json']);
       expect(warnings).toEqual([]);
     });
 
