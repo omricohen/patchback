@@ -7,7 +7,7 @@ Two modes share one `GitHubClient` interface:
 
 - **Token mode** (supported today): a fine-grained personal access token,
   direct calls to the GitHub REST API via `fetch`. Zero dependencies.
-- **App mode** (roadmap, BUILD_PLAN Phase 10): stub only. `createAppClient()`
+- **App mode** (roadmap — see the repo's ROADMAP.md): stub only. `createAppClient()`
   pins down the config shape and throws `GitHubAppModeNotImplementedError`.
 
 There is **no merge method** on the client, by design. Patchback never
@@ -95,7 +95,8 @@ pnpm --filter @patchback/github test
 
 ## App mode (roadmap)
 
-`GitHubAppConfig` and `createAppClient()` exist so later phases can code
-against the interface, but App mode ships in Phase 10, not v0.1. The
-local-first flow (`npx patchback dev`) intentionally requires only a
+`GitHubAppConfig` and `createAppClient()` exist so other code can build
+against the interface, but App mode is post-v0.1 — see
+[ROADMAP.md](https://github.com/omricohen/patchback/blob/main/ROADMAP.md).
+The local-first flow (`npx patchback dev`) intentionally requires only a
 fine-grained token.

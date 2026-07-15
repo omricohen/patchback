@@ -112,6 +112,11 @@ pnpm install
 pnpm lint && pnpm typecheck && pnpm test && pnpm build
 ```
 
+Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) (including the
+hard product rules PRs must not cross) and [ROADMAP.md](ROADMAP.md) for what
+is deliberately out of scope in v0.1. Security reports:
+[SECURITY.md](SECURITY.md).
+
 ## License
 
 [MIT](LICENSE)
