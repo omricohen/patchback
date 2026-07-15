@@ -6,6 +6,9 @@ extraction-inbox/
 .env.*
 !.env.example
 
+# local patchback dev settings (written by `patchback init`)
+patchback.config.ts
+
 # dependencies & build output
 node_modules/
 dist/

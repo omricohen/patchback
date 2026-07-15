@@ -131,7 +131,36 @@ importers:
         specifier: ^0.31.10
         version: 0.31.10
 
-  packages/cli: {}
+  packages/cli:
+    dependencies:
+      '@patchback/agent-claude-code':
+        specifier: workspace:*
+        version: link:../agent-claude-code
+      '@patchback/agent-core':
+        specifier: workspace:*
+        version: link:../agent-core
+      '@patchback/api':
+        specifier: workspace:*
+        version: link:../api
+      '@patchback/github':
+        specifier: workspace:*
+        version: link:../github
+      '@patchback/triage':
+        specifier: workspace:*
+        version: link:../triage
+      '@patchback/types':
+        specifier: workspace:*
+        version: link:../types
+      '@patchback/widget':
+        specifier: workspace:*
+        version: link:../widget
+      fastify:
+        specifier: ^5.10.0
+        version: 5.10.0
+    devDependencies:
+      '@patchback/sdk':
+        specifier: workspace:*
+        version: link:../sdk
 
   packages/github: {}
 
