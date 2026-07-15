@@ -18,6 +18,10 @@
     "./bullmq": {
       "types": "./dist/queue/bullmq.d.ts",
       "default": "./dist/queue/bullmq.js"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "default": "./dist/testing.js"
     }
   },
   "scripts": {

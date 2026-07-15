@@ -13,7 +13,7 @@ import type {
 import { createBriefFromTriagedFeedback, runGit } from '@patchback/agent-core';
 import type { FeedbackItem, Job } from '@patchback/types';
 
-import { createFakeGitHubClient } from '../test/fakes.js';
+import { createFakeGitHubClient } from './testing.js';
 import { createDefaultPatchPipeline, patchBranchName } from './pipeline.js';
 
 let baseDir: string;

@@ -11,7 +11,7 @@ import {
   type FakeGitHubClient,
   type FakePipeline,
   type ScriptedTriage,
-} from './fakes.js';
+} from '../src/testing.js';
 import { buildServer } from '../src/server.js';
 import { createWorkers } from '../src/workers/index.js';
 import { MemoryQueue } from '../src/queue/memory.js';

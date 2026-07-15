@@ -15,12 +15,17 @@ import type { GuardedTaskBrief } from '@patchback/agent-core';
 import type { ModelCaller, ModelRequest } from '@patchback/triage';
 import type { Job, TriageClassification } from '@patchback/types';
 
-import type { PatchPipeline, PatchPipelineResult } from '../src/pipeline.js';
+import type { PatchPipeline, PatchPipelineResult } from './pipeline.js';
 
 /**
- * Scripted fakes for integration and route tests. No vi.mock, no network —
+ * Scripted fakes for tests and local dev harnesses. No vi.mock, no network —
  * plain objects that record calls and return scripted values, matching the
  * repo's injectable-seam convention.
+ *
+ * Shipped as the `@patchback/api/testing` subpath so the SDK contract tests,
+ * the widget playground, and the browser acceptance suite reuse ONE set of
+ * fakes instead of copy-pasting them. Dev/test-only usage; it carries no
+ * extra runtime dependencies.
  */
 
 export interface ScriptedTriage {

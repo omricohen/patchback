@@ -16,7 +16,7 @@ import {
   testKey,
   type FakeGitHubClient,
   type FakePipeline,
-} from '../../test/fakes.js';
+} from '../testing.js';
 import type { ApiConfig } from '../config.js';
 import { generateId, generateReadToken, hashReadToken } from '../ids.js';
 import { MemoryQueue } from '../queue/memory.js';
