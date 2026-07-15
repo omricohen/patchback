@@ -1,13 +1,14 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AgentContext } from '@patchback/agent-core';
 
 import {
   createClaudeCodeAdapter,
+  DEFAULT_ISOLATION_FLAGS,
   DEFAULT_MAX_CHANGED_LINES,
 } from './adapter.js';
 import {
@@ -185,6 +186,108 @@ describe('createClaudeCodeAdapter', () => {
       expect(result.success).toBe(false);
       expect(result.error).toMatch(/could not spawn/i);
       expect(result.error).toMatch(/installed and on PATH/i);
+    });
+  });
+
+  describe('spawn isolation (privacy boundary)', () => {
+    const CALLER_CONFIG_DIR = '/tmp/patchback-test-caller-claude-config';
+
+    /** Run one fake-CLI execute and return what it was spawned with. */
+    async function captureSpawn(extraEnv?: Record<string, string>): Promise<{
+      argv: string[];
+      env: Record<string, string | undefined>;
+      claudeConfigDirExists: boolean;
+    }> {
+      const capturePath = path.join(captureDir, 'spawn.json');
+      const adapter = fakeAdapter('label-change', {
+        env: { FAKE_CLAUDE_SPAWN_CAPTURE: capturePath, ...extraEnv },
+      });
+      const result = await adapter.execute(makeContext());
+      expect(result.success).toBe(true);
+      return JSON.parse(await readFile(capturePath, 'utf8')) as {
+        argv: string[];
+        env: Record<string, string | undefined>;
+        claudeConfigDirExists: boolean;
+      };
+    }
+
+    it("spawns with a per-job empty CLAUDE_CONFIG_DIR, never the caller's, and no env leakage", async () => {
+      const savedConfigDir = process.env.CLAUDE_CONFIG_DIR;
+      const savedCanary = process.env.PATCHBACK_TEST_CANARY;
+      process.env.CLAUDE_CONFIG_DIR = CALLER_CONFIG_DIR;
+      process.env.PATCHBACK_TEST_CANARY = 'must-not-leak';
+      try {
+        const spawned = await captureSpawn();
+        // Isolated config dir: set, existed during the run, per-job temp —
+        // NOT the caller's global one.
+        expect(spawned.env.CLAUDE_CONFIG_DIR).toBeDefined();
+        expect(spawned.env.CLAUDE_CONFIG_DIR).not.toBe(CALLER_CONFIG_DIR);
+        expect(spawned.env.CLAUDE_CONFIG_DIR).toContain(
+          'patchback-claude-cfg-',
+        );
+        expect(spawned.claudeConfigDirExists).toBe(true);
+        // Allowlisted env only: arbitrary caller variables never reach the
+        // CLI; the essentials do.
+        expect(spawned.env.PATCHBACK_TEST_CANARY).toBeUndefined();
+        expect(spawned.env.PATH).toBe(process.env.PATH);
+      } finally {
+        if (savedConfigDir === undefined) {
+          delete process.env.CLAUDE_CONFIG_DIR;
+        } else {
+          process.env.CLAUDE_CONFIG_DIR = savedConfigDir;
+        }
+        if (savedCanary === undefined) {
+          delete process.env.PATCHBACK_TEST_CANARY;
+        } else {
+          process.env.PATCHBACK_TEST_CANARY = savedCanary;
+        }
+      }
+    });
+
+    it('appends the hook/plugin-disabling isolation flags to the invocation', async () => {
+      const spawned = await captureSpawn();
+      expect(DEFAULT_ISOLATION_FLAGS).toEqual([
+        '--bare',
+        '--strict-mcp-config',
+      ]);
+      for (const flag of DEFAULT_ISOLATION_FLAGS) {
+        expect(spawned.argv).toContain(flag);
+      }
+    });
+
+    it('passes ANTHROPIC_API_KEY from the adapter env through to the CLI', async () => {
+      const spawned = await captureSpawn({
+        ANTHROPIC_API_KEY: 'test-placeholder-not-a-real-key',
+      });
+      expect(spawned.env.ANTHROPIC_API_KEY).toBe(
+        'test-placeholder-not-a-real-key',
+      );
+    });
+
+    it('deletes the per-job config dir after the run', async () => {
+      const spawned = await captureSpawn();
+      await expect(
+        stat(spawned.env.CLAUDE_CONFIG_DIR as string),
+      ).rejects.toThrow();
+    });
+
+    it('drops artifacts a hook wrote into a new dot-dir; keeps the real change', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        const adapter = fakeAdapter('dotdir-artifacts');
+        const result = await adapter.execute(makeContext());
+        expect(result.success).toBe(true);
+        expect(result.changedFiles).toEqual([
+          { path: BUTTON_FILE, additions: 1, deletions: 1, binary: false },
+        ]);
+        const warned = warnSpy.mock.calls
+          .map((call) => call.join(' '))
+          .join('\n');
+        expect(warned).toContain('.a5c/');
+        expect(warned).toMatch(/will not be committed/i);
+      } finally {
+        warnSpy.mockRestore();
+      }
     });
   });
 

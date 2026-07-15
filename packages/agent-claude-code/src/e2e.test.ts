@@ -3,7 +3,9 @@
  *
  * Skipped (cleanly, as "skipped") unless PATCHBACK_E2E_CLAUDE=1. Requires:
  *   - the `claude` CLI installed (or PATCHBACK_E2E_CLAUDE_BIN pointing at it)
- *   - working Claude Code auth (ANTHROPIC_API_KEY or `claude` login)
+ *   - ANTHROPIC_API_KEY exported — the adapter spawns the CLI isolated
+ *     (--bare + per-job CLAUDE_CONFIG_DIR), so `claude` login / keychain
+ *     auth is deliberately never read
  *
  * Run: PATCHBACK_E2E_CLAUDE=1 pnpm --filter @patchback/agent-claude-code test
  */
