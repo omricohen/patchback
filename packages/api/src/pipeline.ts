@@ -10,6 +10,7 @@ import {
   checkoutNewBranch,
   cloneRepository,
   detectAndRunChecks,
+  listNewTopLevelDotDirs,
   withScratchDir,
 } from '@patchback/agent-core';
 import type { FileChange, GitHubClient } from '@patchback/github';
@@ -43,6 +44,8 @@ export interface DefaultPipelineOptions {
   baseBranch?: string;
   /** Scratch base override for tests. Default `~/.patchback/jobs`. */
   scratchBaseDir?: string;
+  /** Sink for operational warnings (e.g. dropped artifacts). Default console.warn. */
+  log?: (message: string) => void;
 }
 
 /** Working branch name for a job. */
@@ -67,6 +70,7 @@ export function createDefaultPatchPipeline(
 ): PatchPipeline {
   const { adapter, githubClient, repoSource, baseBranch, scratchBaseDir } =
     options;
+  const log = options.log ?? ((message: string): void => console.warn(message));
 
   return {
     async run(brief: GuardedTaskBrief, job: Job): Promise<PatchPipelineResult> {
@@ -89,10 +93,28 @@ export function createDefaultPatchPipeline(
                 error: execution.error ?? 'agent execution failed',
               };
             }
-            if (execution.changedFiles.length === 0) {
+            // Privacy boundary, second layer (the adapter's diff sweep is
+            // the first): never commit files under a top-level dot-directory
+            // that appeared during the run but is not part of the base
+            // commit — those are local tool artifacts (hook logs, plugin
+            // caches) that can carry machine-local paths into a public PR.
+            const artifactDirs = new Set(await listNewTopLevelDotDirs(workDir));
+            const changedFiles = execution.changedFiles.filter((file) => {
+              const [top] = file.path.split('/');
+              if (top !== undefined && artifactDirs.has(top)) {
+                log(
+                  `Refusing to commit "${file.path}": "${top}/" is a newly ` +
+                    'created top-level dot-directory, not part of the ' +
+                    'repository — treating it as a local tool artifact.',
+                );
+                return false;
+              }
+              return true;
+            });
+            if (changedFiles.length === 0) {
               return { ok: false as const, error: 'agent changed no files' };
             }
-            const binary = execution.changedFiles.find((file) => file.binary);
+            const binary = changedFiles.find((file) => file.binary);
             if (binary !== undefined) {
               return {
                 ok: false as const,
@@ -119,7 +141,7 @@ export function createDefaultPatchPipeline(
             }
 
             const files: FileChange[] = [];
-            for (const changed of execution.changedFiles) {
+            for (const changed of changedFiles) {
               const absolute = path.join(workDir, changed.path);
               if (await fileExists(absolute)) {
                 files.push({

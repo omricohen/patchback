@@ -31,6 +31,7 @@
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
+    "@fastify/cors": "^11.3.0",
     "@patchback/agent-core": "workspace:*",
     "@patchback/github": "workspace:*",
     "@patchback/triage": "workspace:*",

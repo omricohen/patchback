@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { readdir } from 'node:fs/promises';
 
 import type { ChangedFile } from './adapter.js';
 
@@ -82,14 +83,75 @@ export async function currentBranch(dir: string): Promise<string> {
 }
 
 /**
+ * Top-level dot-directories present in `dir`'s work tree but absent from the
+ * base commit (HEAD). These are almost always local tool artifacts — plugin
+ * caches, hook logs, editor state — written into a scratch clone by software
+ * running on the machine, never something a patch should publish. `.git` is
+ * never reported. A repo without any commit has no baseline, so every
+ * top-level dot-directory counts as new (fail closed).
+ */
+export async function listNewTopLevelDotDirs(dir: string): Promise<string[]> {
+  let baseEntries: Set<string>;
+  try {
+    const tree = await runGit(dir, ['ls-tree', '--name-only', 'HEAD']);
+    baseEntries = new Set(
+      tree
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line !== ''),
+    );
+  } catch {
+    baseEntries = new Set();
+  }
+  const entries = await readdir(dir, { withFileTypes: true });
+  return entries
+    .filter(
+      (entry) =>
+        entry.isDirectory() &&
+        entry.name.startsWith('.') &&
+        entry.name !== '.git' &&
+        !baseEntries.has(entry.name),
+    )
+    .map((entry) => entry.name)
+    .sort();
+}
+
+export interface DiffNumstatOptions {
+  /** Sink for sweep-exclusion warnings. Default: console.warn. */
+  warn?: (message: string) => void;
+}
+
+/**
  * Uncommitted changes in `dir` as parsed `git diff --numstat`, including
  * untracked files (via `git add --intent-to-add`). Binary files count as 0
  * lines but are flagged `binary: true`.
+ *
+ * Privacy boundary: top-level dot-directories that were never part of the
+ * repo (see {@link listNewTopLevelDotDirs}) are excluded from the sweep —
+ * anything swept here ends up committed to a real branch and published in a
+ * PR, and such directories are local tool artifacts (plugin caches, hook
+ * logs) that may carry machine-local paths. Each exclusion is reported via
+ * `options.warn`.
  */
-export async function diffNumstat(dir: string): Promise<ChangedFile[]> {
+export async function diffNumstat(
+  dir: string,
+  options?: DiffNumstatOptions,
+): Promise<ChangedFile[]> {
+  const warn =
+    options?.warn ?? ((message: string): void => console.warn(message));
+  const excludedDirs = await listNewTopLevelDotDirs(dir);
+  const pathspec = ['.', ...excludedDirs.map((name) => `:(exclude)${name}`)];
   // Make untracked files visible to diff without staging their content.
-  await runGit(dir, ['add', '--intent-to-add', '--all']);
-  const raw = await runGit(dir, ['diff', '--numstat']);
+  await runGit(dir, ['add', '--intent-to-add', '--all', '--', ...pathspec]);
+  const raw = await runGit(dir, ['diff', '--numstat', '--', ...pathspec]);
+  for (const name of excludedDirs) {
+    warn(
+      `Excluded newly created top-level dot-directory "${name}/" from the ` +
+        'changed-file sweep: it is not part of the repository and looks ' +
+        'like a local tool artifact (plugin cache, hook log). Its files ' +
+        'will not be committed.',
+    );
+  }
   const files: ChangedFile[] = [];
   for (const line of raw.split('\n')) {
     if (line.trim() === '') continue;

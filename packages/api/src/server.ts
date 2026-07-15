@@ -1,3 +1,4 @@
+import cors from '@fastify/cors';
 import Fastify, { type FastifyInstance } from 'fastify';
 
 import { resolveAuth, type RequestAuth } from './auth.js';
@@ -42,6 +43,18 @@ export function buildServer(config: ApiConfig): FastifyInstance {
       },
     },
   });
+
+  if (config.cors !== undefined) {
+    // Explicitly configured origins only (validated: never a wildcard).
+    // `credentials: false` — the API authenticates with Authorization
+    // headers set by page script, never cookies, so reflecting credentials
+    // is neither needed nor wanted.
+    void app.register(cors, {
+      origin: [...config.cors.allowedOrigins],
+      methods: ['GET', 'POST', 'OPTIONS'],
+      credentials: false,
+    });
+  }
 
   app.decorateRequest('auth', null as unknown as RequestAuth);
   app.addHook('onRequest', async (request) => {

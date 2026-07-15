@@ -19,5 +19,18 @@
   },
   "bin": {
     "patchback": "./dist/index.js"
+  },
+  "dependencies": {
+    "@patchback/agent-claude-code": "workspace:*",
+    "@patchback/agent-core": "workspace:*",
+    "@patchback/api": "workspace:*",
+    "@patchback/github": "workspace:*",
+    "@patchback/triage": "workspace:*",
+    "@patchback/types": "workspace:*",
+    "@patchback/widget": "workspace:*",
+    "fastify": "^5.10.0"
+  },
+  "devDependencies": {
+    "@patchback/sdk": "workspace:*"
   }
 }

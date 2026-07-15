@@ -4,164 +4,139 @@ _Last updated: 2026-07-15_
 
 ## Current phase
 
-**Phase 7 (Widget + React wrapper + SDK) — CODE DONE (attempt 3)** on
-branch `phase-7-widget-sdk` (not merged, not pushed — Omri's call),
-implemented per the approved plan
-(`.a5c/runs/01KX6GMZ9TJBCR1RH3CCNMM77E/artifacts/phase-7-plan.md`), all
-open questions resolved as approved (picker visible by default, message
-verbatim, snapdom, `/testing` subpath, playwright infra, Start-patch
-button in-widget, query-stripped URL default).
-Phase 2 (extraction pass) still pending source material in
-`extraction-inbox/`. Next up: **Phase 8 — CLI `npx patchback dev`** (or
-merge/review of this branch first).
+**Phase 8 (CLI: `npx patchback dev`) — DONE, verifier findings fixed
+(attempt 2), LIVE ROUND-TRIP GREEN** on branch `phase-8-cli` (not merged,
+not pushed — Omri's call). Phase 7 (`phase-7-widget-sdk`) was merged to
+main before this phase started. Phase 2 (extraction pass) still pending
+source material in `extraction-inbox/`. Next up: **Phase 9 — examples,
+docs, demo** (or merge/review of this branch first).
 
-## Attempt-2 fixes (verifier rejection of attempt 1)
+## Phase 8 attempt 2 — verifier findings fixed (2026-07-15)
 
-The verifier empirically falsified the screenshot redaction geometry:
-snapdom rasters the FULL document (and scrolls the page to the top
-mid-capture, unrestored) while layer-2 rects were viewport-space — on a
-scrolled page redaction painted at wrong positions and masked MEDIA
-(img/canvas/svg/video/background-image) leaked through layer 1 entirely.
-Fixed and re-proven:
+Two critical findings from the phase-8 review, both fixed and verified:
 
-- Clone stage strips media + CSS image sources in masked/ignored
-  subtrees (incl. the ignored element's OWN background); unmask-marked
-  descendants stay intact. Unit-pinned in `clone.test.ts`.
-- All live geometry (body rect, scroll, viewport, rects) is measured
-  BEFORE rendering; the raster is cropped to the viewport
-  (`computeViewportCrop`, dpr-safe), rects painted on the crop, scroll
-  restored after the renderer's reset. Unit-pinned (incl. a scrolled
-  fake-raster regression test) + pixel-proven.
-- Acceptance suite gained: a SCROLLED below-fold case (masked img,
-  masked CSS background, below-fold password uniformly filled; an
-  adjacent UNMASKED control keeps its color → crop alignment + no
-  misplaced fill), a viewport-shape assertion on every screenshot, and a
-  scroll-restore assertion. All 3 browser tests green locally.
-- snapdom's vendored fonts.gstatic.com icon-font URLs are disabled at
-  runtime (`__SNAPDOM_ICON_FONTS__` override before module eval);
-  hygiene tests now also scan the shipped IIFE bundle against an origin
-  allowlist (skips with a notice if dist isn't built; enforced in the CI
-  browser job).
-- Docs corrected via SUPERSEDING DECISIONS entries (past entries kept
-  per house rules) + README screenshot contract rewritten (viewport
-  capture, media stripping, no-phone-home note).
+1. **Agent-spawn isolation (privacy).** The adapter used to spawn `claude`
+   inheriting the machine's FULL global config; a globally installed plugin
+   hook wrote `.a5c/` state (with local absolute paths) into the scratch
+   clone, and the intent-to-add sweep published it into a real PR. Fixed
+   with defense in depth, all test-pinned:
+   - Spawn isolation: per-job empty `CLAUDE_CONFIG_DIR` (mkdtemp, deleted
+     after the run), allowlisted env (PATH/HOME/locale +
+     `ANTHROPIC_API_KEY` passthrough; `runProcess` gained
+     `inheritEnv: false`), and `--bare --strict-mcp-config` appended
+     (`DEFAULT_ISOLATION_FLAGS`, overridable; env layer is always on).
+     Note: `--bare` means agent auth is strictly `ANTHROPIC_API_KEY`.
+   - Sweep filter: `diffNumstat` excludes any newly appearing top-level
+     dot-directory absent from the base commit, with a warning
+     (`listNewTopLevelDotDirs` in agent-core git.ts).
+   - Commit-path filter (second layer): the default pipeline re-checks and
+     refuses to commit files under such directories even if an adapter
+     reports them, logging via the new `DefaultPipelineOptions.log` seam
+     (wired from `ApiConfig.log`).
+2. **Live e2e fixture.** The old canned message was instruction-shaped and
+   the real classifier correctly triaged it DOWN — the test could never
+   pass live. Rewritten: the test seeds `docs/getting-started.md` with a
+   real typo via the GitHub contents API, submits a natural user-voice
+   defect report, asserts triage → patchable → real agent → real PR whose
+   diff touches ONLY the seeded file (zero dot-dir artifacts — the live pin
+   for finding 1) and actually fixes the typo, then cleans everything up.
 
-## Attempt-3 fixes (verifier rejection of attempt 2)
+**Live run result (2026-07-15):** GREEN against omricohen/testingPatchBack
+— full suite 58/58 with the live test included; PR #8 opened by the real
+agent with exactly `docs/getting-started.md` +1/−1; PR/issue closed,
+branch and seeded file removed by cleanup. Keyless, the suite is 57
+passed + 1 skipped (live gate skips cleanly). Root gate green:
+`pnpm lint && pnpm typecheck && pnpm test && pnpm build` + `format:check`.
 
-The verifier proved snapdom does NOT honor the clone's
-`background-image: none !important` — its resource-inlining pass rewrites
-url-bearing properties from the LIVE element AFTER the afterClone hook
-(confirmed by probing the serialized SVG: our `none` was replaced by the
-resolved data URI while a control `outline !important` survived), leaving
-masked CSS backgrounds single-layer; and layer 2's fractional rects
-leaked a ~1-device-px top-edge sliver in scrolled captures. Fixed and
-re-proven:
+## What's done (Phase 8)
 
-- Layer 1 now paints `box-shadow: inset 0 0 0 9999px REDACTION_FILL
-!important` on every masked/ignored clone element — a non-url property
-  that survives snapdom's pipeline, covers background color AND image,
-  and stays under unmasked children (the `none` suppressions kept as
-  defense for other renderers). Empirically verified with layer 2
-  disabled: masked-bg rasters 100% fill, 0% source color.
-- Layer 2 rounds ALWAYS OUTWARD (1 CSS px bleed → device px floor/ceil →
-  +1 device px), unit-pinned; the scrolled acceptance case samples
-  masked regions at inset(1) so an edge sliver fails CI.
-- The two-layer guarantee is now TESTED: a test-only global
-  (`__PATCHBACK_TEST_ONLY_DISABLE_RASTER_REDACTION__`, not part of
-  public config) disables layer-2 painting; a new acceptance test
-  captures with it set and asserts the masked CSS background is ≤2% its
-  source color and ≥95% redaction fill, password box filled, unmasked
-  control intact. All 4 browser tests green locally.
-- Honest residual (documented in README + DECISIONS): the inset shadow
-  covers the padding box, so border-ring imagery (border-image) relies
-  on the kept `none` suppression plus layer-2 border-box rects.
-
-## What's done (Phase 7)
-
-- `@patchback/sdk` — zero-dep injectable-fetch client for the six-route
-  contract; explicit `ReadAuth` (read token | apiKey, no silent
-  fallback); typed request builders (client-side `trustTier`
-  unrepresentable); `PatchbackApiError` failing closed to `unknown`;
-  `pollJobStatus` (fast→slow at triage, capped backoff + connection
-  callback, hard stop on 404, terminal stop, AbortSignal). Contract
-  tests boot the REAL `buildServer`; poll tests under fake timers.
-- `@patchback/api/testing` — the phase-6 scripted fakes promoted to a
-  shipped subpath; api tests, SDK contract tests, and the playground all
-  consume one copy.
-- `@patchback/widget` — vanilla zero-runtime-dep core (snapdom the one
-  lazy exception), open shadow root, no custom element, host
-  ignore-marked so the widget never captures itself:
-  - **Masking engine (built first):** masked-vs-ignored verbs,
-    nearest-marker resolution, non-overridable password/cc/otp floor
-    (each member test-pinned), open-shadow traversal, fail-closed
-    cross-origin iframes, loud invalid-selector init errors; `scrubText`
-    for captured text (bearer/keys/JWT/email/query/blob).
-  - **Capture defaults per rule 4:** zero-config payload = message +
-    query-stripped URL + capturedAt (exact-snapshot test); config
-    consent for page/console/screenshot; gesture consent + "What will be
-    sent" preview for picker/screenshot; `buildCaptureContext` is the
-    single choke point and requires the engine.
-  - Console ring buffer (wrap not installed without config, errors-only
-    default, scrub-at-insert, reference-safe uninstall), DOM path
-    builder (stable-id preference, generated-id rejection), element
-    picker overlay (page DOM never mutated, ignored elements
-    unpickable), thread view + compile-exhaustive status map + reply
-    gate mirroring the server + presentation-only Start-patch button,
-    visibility-aware polling, memory-first read-token custody
-    (localStorage opt-in).
-  - **Screenshots:** renderer seam; snapdom (pinned 2.12.8) confined to
-    one dynamically-imported file (hygiene test); redaction = clone-stage
-    strip (afterClone) + raster-stage rect painting, independently
-    unit-tested; WebP→JPEG drop-not-violate ladder under 512 KiB.
-  - Vite IIFE bundle (`window.Patchback.create`) alongside tsc ESM.
-- `@patchback/react` — lifecycle-only wrapper (peer `^18||^19`):
-  Provider (SSR/StrictMode-safe, config by identity), `usePatchback`,
-  `usePatchbackStatus`, `PatchbackLauncher`.
-- `apps/widget-playground` — real Vite harness: demo dashboard with
-  sentinel-filled inputs / ignored card / typo'd button; fake-pipeline
-  dev API (real server+workers+memory drivers, keyword-scripted model —
-  `[clarify]`/`[human]` —, delayed fake pipeline, signed
-  `/_dev/merge/:pr` webhook helper); vanilla + React pages; dev proxy
-  (CORS deferred to Phase 8, logged). README documents the manual accept
-  flow.
-- **Acceptance:** jsdom half — masked inputs never in the serialized
-  payload (sentinel proof over picker text/console/title/URL). Browser
-  half — env-gated (`PATCHBACK_BROWSER_TESTS=1`) Playwright Chromium
-  suite runs the whole loop on the real playground: hover-geometry,
-  unpickable ignored card, stored-item sentinel proof + `#export-btn`
-  domPath, screenshot PIXEL uniformity proof over masked regions, status
-  chip walk to Closed via the signed merge webhook, clarification/reply
-  branch. **Verified green locally against installed Chromium this
-  session**; CI gained a dedicated required browser job.
-- Gate green: `pnpm lint && pnpm typecheck && pnpm test && pnpm build`
-  and `pnpm format:check`, zero credentials/services/browsers by
-  default.
+- **`patchback init`** (interactive first-run): prompts for target repo
+  (owner/name), GitHub fine-grained token (echo-suppressed), Anthropic API
+  key (echo-suppressed), test commands, and app origin. The token is
+  validated with a live GitHub call: 401 / 404 / read-only-permissions each
+  produce an actionable message and a re-prompt (3 attempts); offline is
+  warn-and-continue. A repo-scripts preflight reads the target repo's root
+  package.json via the API and prints a clear "no test script — patches
+  won't be gated" message. Writes:
+  - `patchback.config.ts` — non-secret settings only. The template is
+    **annotation-free** (JSDoc types), so it is valid JS and `patchback dev`
+    loads it via a data-URL `import()` with no TS compiler at runtime.
+  - `.env` — GITHUB_TOKEN / ANTHROPIC_API_KEY, merged in place, chmod 600.
+    Secrets are NEVER echoed to the terminal, in summaries or errors.
+  - `.gitignore` — `.env` + `patchback.config.ts` appended in a git work
+    tree.
+- **`patchback dev`**: loads `.env` (environment wins) + config, then
+  composes the REAL `buildServer` + `createWorkers` in one process over
+  `MemoryStore` + `MemoryQueue` (zero services), with
+  `createClaudeCodeAdapter` (agent), `createAnthropicModelCaller` (triage),
+  and `createTokenClient` (GitHub). Runs `patchback init` automatically when
+  no config exists. Serves `/widget.js` (the @patchback/widget IIFE bundle)
+  and `/snippet`; prints a banner with the copy-paste embed snippet and two
+  per-run dev API keys (owner + insider — these are local session keys, not
+  user secrets). `--port` flag; port 0 supported for tests.
+- **Job log streaming** via a Store decorator (`instrumentStore`) — the
+  store is the single choke point for routes AND workers, so every state
+  transition, triage verdict, and feedback intake streams to the terminal
+  with readable labels. `patch.failed` renders a headline + advice via
+  `explainPatchFailure` (lint failed / tests failed / agent gave up / diff
+  ceiling / claude not installed / clone auth), tested per path.
+- **Secret scrubbing**: the clone URL embeds the GitHub token
+  (`x-access-token@github.com`), so the logger AND the store decorator
+  scrub every known secret from log lines, `job.error`, and history notes
+  BEFORE persistence (job errors are served back over the API).
+- **CORS landed in @patchback/api** behind explicit config
+  (`ApiConfig.cors.allowedOrigins`, @fastify/cors 11.x): off by default,
+  exact origins only, `*` rejected at startup, `credentials: false`.
+  `patchback dev` wires it from `config.appOrigins`. Closes the Phase-7
+  OPEN_ISSUES entry.
+- **Dev-mode PR poller** (webhooks can't reach localhost): polls
+  `getPullRequestStatus` for jobs at `pr.opened`/`pr.reviewed`; merged PRs
+  walk `pr.reviewed → patch.shipped → feedback.closed` (merge implies
+  review, same as the webhook rule); closed-without-merge is reported once
+  and changes no state (still unrepresentable — see OPEN_ISSUES).
+- **Phase-6 advisories fixed**: patch-worker now LOGS a lost success-path
+  CAS via the new `ApiConfig.log` seam (test proves the message fires and
+  metadata loss is loud); the stale reply-tier header comment in
+  `routes/feedback.ts` now matches the thread-minimum-only code.
+- **Tests** (57 passing + 1 env-gated skip in the cli package):
+  - e2e dev-mode over fakes: SDK against the real HTTP server — submit →
+    triage → start → fake pipeline → `pr.opened`, transition stream order
+    asserted; clarification loop; lint-failed and agent-gave-up renderings;
+    poller walk to `feedback.closed`; outsider stays data-only end to end;
+    CORS on the configured origin only; widget + snippet endpoints.
+  - init suite over temp dirs + scripted prompts (secrets never in output,
+    config never contains secrets, bad-token re-prompt, offline, gitignore).
+  - Live full-PR round-trip env-gated behind `GITHUB_TOKEN` +
+    `PATCHBACK_TEST_REPO` + `ANTHROPIC_API_KEY` (also needs the `claude`
+    binary), self-cleaning (closes PR/issue, deletes branch, removes the
+    seeded fixture file). **Ran GREEN with real credentials on 2026-07-15**
+    (see "Phase 8 attempt 2" above).
+- Gate green: `pnpm lint && pnpm typecheck && pnpm test && pnpm build` and
+  `pnpm format:check`.
 
 ## Next concrete step
 
-1. Review + merge `phase-7-widget-sdk`.
-2. Phase 8 — CLI `npx patchback dev`: boots API in-memory + workers +
-   local PR-status polling (webhooks can't reach localhost), prints the
-   widget snippet (needs the CORS work — see OPEN_ISSUES), first-run
-   config writer, composes the real pipeline (Claude Code adapter +
-   GitHub token).
-3. Still pending: live triage eval run (`ANTHROPIC_API_KEY`).
+1. Review + merge `phase-8-cli` (live round-trip is green; findings fixed).
+2. Phase 9 — `examples/nextjs-demo` + `examples/vite-demo`, README
+   quickstart against reality, demo GIF script.
+3. Still pending: Phase 2 extraction inbox.
 
 ## Context to pick up cleanly
 
-- Phase 7 decisions in `.claude/DECISIONS.md` (ten entries dated
-  2026-07-15): capture defaults/two-tier consent; masking semantics;
-  screenshot seam + two-layer redaction; console posture; widget
-  architecture (open shadow, IIFE+ESM); SDK DTO/contract-test strategy;
-  token custody; `/testing` subpath; env-gated browser acceptance;
-  CORS deferral.
-- New OPEN_ISSUES: API CORS (Phase 8); embedded-key tier implication
-  (documented, revisit = per-user token exchange); closed shadow roots
-  undetectable (fail-closed via renderer opacity, not paint).
-- Dep pins: `@zumer/snapdom@2.12.8` and `playwright@~1.60.0` — aged
-  releases per the no-fresh-packages posture.
-- The widget's `polling: {fastMs, slowMs}` config exists mainly so the
-  playground/acceptance run snappily; SDK defaults are 2500/15000.
-- Browser suite locally: `pnpm --filter widget-playground exec
-playwright install chromium` once, then
-  `PATCHBACK_BROWSER_TESTS=1 pnpm --filter widget-playground test`.
+- Attempt-2 decisions in `.claude/DECISIONS.md` (2026-07-15): agent-spawn
+  isolation posture (flags + env + double sweep filter) and the
+  seeded-defect live-fixture rule. Residual watch item in OPEN_ISSUES:
+  the flag layer needs `claude` CLI >= 2.1 (`--bare`).
+- Phase 8 decisions in `.claude/DECISIONS.md` (dated 2026-07-15): config
+  split (secrets in .env / settings in annotation-free patchback.config.ts),
+  store-decorator log streaming + secret scrubbing, CORS posture, PR
+  poller, probe design, per-run dev keys.
+- `npx patchback dev` from a cold machine only works after packages publish
+  (Phase 10); inside the repo it's `pnpm --filter patchback build` then
+  `node packages/cli/dist/index.js dev` (or a workspace script).
+- `testCommands` in patchback.config.ts is informational for v0.1 — the
+  pipeline runs the target repo's OWN package.json scripts via the
+  check-runner; the init preflight warns when there's no test script.
+- The widget bundle served at `/widget.js` resolves from
+  `@patchback/widget/dist/patchback-widget.iife.js` — build the workspace
+  first or the route 404s with a pointer.

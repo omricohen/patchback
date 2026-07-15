@@ -39,8 +39,12 @@ interface ReplyBody {
  * - The body schema has `additionalProperties: false` and NO `trustTier`
  *   property: a client-supplied tier is a 400, never silently ignored. Tiers
  *   are stamped exclusively from `request.auth` (server-side key map).
- * - A reply's effective tier is the MINIMUM across its whole thread plus the
- *   caller — outsider content anywhere in a thread can never be laundered
+ * - A reply's effective tier is the MINIMUM across its whole thread — the
+ *   caller's own tier deliberately does NOT enter the minimum (read access
+ *   already proves thread membership; the thread's provenance decides). A
+ *   capability-model consequence: a leaked read token lets its holder reply
+ *   at the THREAD's tier. Outsider content anywhere in a thread still
+ *   poisons every reply, so nothing outsider-rooted can ever be laundered
  *   into a patch job by a trusted replier.
  */
 export function registerFeedbackRoutes(

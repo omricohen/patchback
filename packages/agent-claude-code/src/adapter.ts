@@ -1,3 +1,7 @@
+import { mkdtemp, rm } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+
 import {
   diffNumstat,
   isGitWorkTree,
@@ -20,6 +24,65 @@ export const DEFAULT_MAX_CHANGED_LINES = 300;
 const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
 const DEFAULT_OUTPUT_TAIL_CHARS = 4000;
 
+/**
+ * Flag-level isolation for the spawned CLI (Claude Code >= 2.1):
+ *
+ * - `--bare` — skip hooks, plugin sync, LSP, auto-memory, keychain reads,
+ *   and CLAUDE.md auto-discovery; auth is strictly ANTHROPIC_API_KEY.
+ * - `--strict-mcp-config` — ignore every MCP server not explicitly passed
+ *   via `--mcp-config` (we pass none).
+ *
+ * Why this matters: without isolation the CLI inherits the machine's GLOBAL
+ * Claude Code configuration, and globally installed hooks/plugins can write
+ * their state (caches, logs with machine-local absolute paths) into the
+ * scratch clone — which the changed-file sweep would then publish into a
+ * real PR. Env-level isolation (per-job empty CLAUDE_CONFIG_DIR, allowlisted
+ * environment) stays on even when these flags are overridden.
+ */
+export const DEFAULT_ISOLATION_FLAGS = ['--bare', '--strict-mcp-config'];
+
+/**
+ * The only variables the spawned CLI inherits from the parent process.
+ * Everything else (including the caller's CLAUDE_CONFIG_DIR) is dropped;
+ * adapter `env` options are merged on top, and CLAUDE_CONFIG_DIR is always
+ * forced to the per-job directory last.
+ */
+const INHERITED_ENV_VARS = [
+  'PATH',
+  'HOME',
+  'USER',
+  'SHELL',
+  'TMPDIR',
+  'TEMP',
+  'TMP',
+  'LANG',
+  'LC_ALL',
+  // Windows process bootstrap essentials.
+  'USERPROFILE',
+  'SYSTEMROOT',
+  'SystemRoot',
+  'COMSPEC',
+  'ComSpec',
+  'PATHEXT',
+  // Auth passthrough — with --bare this is the only accepted auth source.
+  'ANTHROPIC_API_KEY',
+];
+
+/** Minimal, allowlisted environment for the spawned CLI. */
+function buildIsolatedEnv(
+  configDir: string,
+  extra?: Record<string, string>,
+): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const name of INHERITED_ENV_VARS) {
+    const value = process.env[name];
+    if (value !== undefined) {
+      env[name] = value;
+    }
+  }
+  return { ...env, ...extra, CLAUDE_CONFIG_DIR: configDir };
+}
+
 export interface ClaudeCodeAdapterOptions {
   /**
    * Path to the CLI binary. Default `claude` (resolved via PATH). Tests
@@ -33,6 +96,14 @@ export interface ClaudeCodeAdapterOptions {
    * `-p --output-format json --permission-mode acceptEdits`.
    */
   cliFlags?: string[];
+  /**
+   * Flags appended after `cliFlags` that cut the spawned CLI off from the
+   * machine's global configuration (hooks, plugins, MCP servers). Default
+   * {@link DEFAULT_ISOLATION_FLAGS}. Override only for CLI versions that
+   * lack them — the env-level isolation (per-job CLAUDE_CONFIG_DIR plus an
+   * allowlisted environment) applies regardless.
+   */
+  isolationFlags?: string[];
   /**
    * Diff-size ceiling in changed lines (additions + deletions). Exceeding it
    * fails the job: a bigger diff means triage was wrong, not that the agent
@@ -67,6 +138,7 @@ export function createClaudeCodeAdapter(
     '--permission-mode',
     'acceptEdits',
   ];
+  const isolationFlags = options?.isolationFlags ?? DEFAULT_ISOLATION_FLAGS;
   const maxChangedLines = options?.maxChangedLines ?? DEFAULT_MAX_CHANGED_LINES;
   const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
@@ -129,13 +201,26 @@ export function createClaudeCodeAdapter(
 
     async execute(ctx) {
       const prompt = buildPrompt(ctx.brief, ctx.conventions, maxChangedLines);
-      const args = [...binaryArgs, ...cliFlags];
-      const outcome = await runProcess(binaryPath, args, {
-        cwd: ctx.workDir,
-        timeoutMs,
-        input: prompt,
-        ...(options?.env !== undefined ? { env: options.env } : {}),
-      });
+      const args = [...binaryArgs, ...cliFlags, ...isolationFlags];
+
+      // Per-job empty config dir: the CLI must never see the machine's
+      // global Claude Code configuration (hooks, plugins, settings). Created
+      // fresh per run, deleted after — nothing accumulates.
+      const configDir = await mkdtemp(
+        path.join(os.tmpdir(), 'patchback-claude-cfg-'),
+      );
+      let outcome;
+      try {
+        outcome = await runProcess(binaryPath, args, {
+          cwd: ctx.workDir,
+          timeoutMs,
+          input: prompt,
+          inheritEnv: false,
+          env: buildIsolatedEnv(configDir, options?.env),
+        });
+      } finally {
+        await rm(configDir, { recursive: true, force: true });
+      }
 
       if (outcome.spawnError !== undefined) {
         return fail(

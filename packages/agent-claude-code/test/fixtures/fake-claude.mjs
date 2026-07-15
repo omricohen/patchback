@@ -9,21 +9,54 @@
  * Behavior is controlled via environment variables so tests can drive
  * scenarios without changing spawn logic:
  *
- *   FAKE_CLAUDE_MODE            label-change | huge-diff | no-op | garbage |
- *                               cli-error | crash | hang   (default label-change)
+ *   FAKE_CLAUDE_MODE            label-change | dotdir-artifacts | huge-diff |
+ *                               no-op | garbage | cli-error | crash | hang
+ *                               (default label-change)
  *   FAKE_CLAUDE_TARGET_FILE     file to edit for label-change (cwd-relative)
  *   FAKE_CLAUDE_FROM / _TO      label text to replace / replacement
  *   FAKE_CLAUDE_PROMPT_CAPTURE  absolute path; the received prompt is written
  *                               here so tests can assert on it without
  *                               dirtying the work tree
+ *   FAKE_CLAUDE_SPAWN_CAPTURE   absolute path; argv + full env + whether the
+ *                               CLAUDE_CONFIG_DIR exists are written here as
+ *                               JSON so tests can pin spawn isolation
  */
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 
 const prompt = readFileSync(0, 'utf8');
 const mode = process.env.FAKE_CLAUDE_MODE ?? 'label-change';
 
 if (process.env.FAKE_CLAUDE_PROMPT_CAPTURE) {
   writeFileSync(process.env.FAKE_CLAUDE_PROMPT_CAPTURE, prompt);
+}
+if (process.env.FAKE_CLAUDE_SPAWN_CAPTURE) {
+  writeFileSync(
+    process.env.FAKE_CLAUDE_SPAWN_CAPTURE,
+    JSON.stringify({
+      argv: process.argv.slice(2),
+      env: process.env,
+      claudeConfigDirExists:
+        typeof process.env.CLAUDE_CONFIG_DIR === 'string' &&
+        existsSync(process.env.CLAUDE_CONFIG_DIR),
+    }),
+  );
+}
+
+/** Simulate a global hook/plugin writing its state into the working copy. */
+function writeDotDirArtifacts() {
+  mkdirSync('.a5c/cache', { recursive: true });
+  mkdirSync('.a5c/logs', { recursive: true });
+  writeFileSync(
+    '.a5c/cache/hook-state.json',
+    JSON.stringify({
+      cwd: '/Users/example-user/private/some-client-project',
+      plugin: 'example-stop-hook',
+    }) + '\n',
+  );
+  writeFileSync(
+    '.a5c/logs/stop-hook.log',
+    'stop hook fired in /Users/example-user/private/some-client-project\n',
+  );
 }
 
 function printResult(resultText, isError = false) {
@@ -57,6 +90,17 @@ switch (mode) {
     printResult(
       `Changed label ${JSON.stringify(from)} to ${JSON.stringify(to)} in ${file}.`,
     );
+    break;
+  }
+  case 'dotdir-artifacts': {
+    // A real change PLUS hook/plugin artifacts in a new top-level dot dir —
+    // the sweep must publish the change and drop the artifacts.
+    const file = process.env.FAKE_CLAUDE_TARGET_FILE ?? 'src/button.js';
+    const from = process.env.FAKE_CLAUDE_FROM ?? 'Save changes';
+    const to = process.env.FAKE_CLAUDE_TO ?? 'Submit changes';
+    writeFileSync(file, readFileSync(file, 'utf8').replaceAll(from, to));
+    writeDotDirArtifacts();
+    printResult(`Changed label in ${file}. (Hook artifacts also appeared.)`);
     break;
   }
   case 'huge-diff': {
