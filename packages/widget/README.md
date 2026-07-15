@@ -108,18 +108,31 @@ renderer scrolls the page during rasterization; the widget restores the
 user's scroll position afterwards.
 
 DOM rasterization (snapdom, behind a one-file renderer seam) with **two
-independent redaction layers**:
+independent redaction layers** — independence that is _tested_, not
+asserted: a CI browser test disables layer 2 (via a test-only global that
+is not part of the public config) and pixel-proves a layer-1-only capture
+already contains no masked content:
 
 1. **Clone stage (semantic):** masked content is stripped from the render
    clone _before pixels exist_ — form values, text (same-length filler),
-   AND media: `img`/`source` sources, canvas buffers, inline SVG,
-   video/audio sources and posters, and CSS
-   `background-image`/`border-image`/`mask-image`. Ignored elements are
-   emptied and their OWN media/background stripped too.
+   media (`img`/`source` sources, canvas buffers, inline SVG, video/audio
+   sources and posters) — and every masked/ignored box is painted opaque
+   with an **inset box-shadow** in the redaction color. The shadow is the
+   effective CSS-background redaction: snapdom re-inlines url-bearing
+   properties like `background-image` from the live element after our
+   hook, so `background-image: none` alone is not honored (it is still
+   set, as defense for renderers that do honor the clone); the shadow is
+   a non-url property that survives, paints over the background, and
+   stays under unmasked children. Ignored elements are emptied and their
+   OWN media/background covered the same way. One honest gap: the shadow
+   covers the padding box, so `border-image` imagery in the border ring
+   relies on the raster layer.
 2. **Raster stage (geometric):** the viewport boxes of every masked and
    ignored element — measured from the live DOM in the same frame as the
    capture — are painted over the cropped canvas, so they land on the
-   right pixels at any scroll position.
+   right pixels at any scroll position. Box edges always round **outward**
+   to whole device pixels (plus a bleed), so sub-pixel geometry can never
+   leave a content sliver at an edge.
 
 The result is downscaled and walked down a WebP→JPEG quality ladder until
 it fits the server's 512 KiB cap — if it can't fit, it is **dropped with

@@ -4,7 +4,7 @@ _Last updated: 2026-07-15_
 
 ## Current phase
 
-**Phase 7 (Widget + React wrapper + SDK) — CODE DONE (attempt 2)** on
+**Phase 7 (Widget + React wrapper + SDK) — CODE DONE (attempt 3)** on
 branch `phase-7-widget-sdk` (not merged, not pushed — Omri's call),
 implemented per the approved plan
 (`.a5c/runs/01KX6GMZ9TJBCR1RH3CCNMM77E/artifacts/phase-7-plan.md`), all
@@ -45,6 +45,36 @@ Fixed and re-proven:
 - Docs corrected via SUPERSEDING DECISIONS entries (past entries kept
   per house rules) + README screenshot contract rewritten (viewport
   capture, media stripping, no-phone-home note).
+
+## Attempt-3 fixes (verifier rejection of attempt 2)
+
+The verifier proved snapdom does NOT honor the clone's
+`background-image: none !important` — its resource-inlining pass rewrites
+url-bearing properties from the LIVE element AFTER the afterClone hook
+(confirmed by probing the serialized SVG: our `none` was replaced by the
+resolved data URI while a control `outline !important` survived), leaving
+masked CSS backgrounds single-layer; and layer 2's fractional rects
+leaked a ~1-device-px top-edge sliver in scrolled captures. Fixed and
+re-proven:
+
+- Layer 1 now paints `box-shadow: inset 0 0 0 9999px REDACTION_FILL
+!important` on every masked/ignored clone element — a non-url property
+  that survives snapdom's pipeline, covers background color AND image,
+  and stays under unmasked children (the `none` suppressions kept as
+  defense for other renderers). Empirically verified with layer 2
+  disabled: masked-bg rasters 100% fill, 0% source color.
+- Layer 2 rounds ALWAYS OUTWARD (1 CSS px bleed → device px floor/ceil →
+  +1 device px), unit-pinned; the scrolled acceptance case samples
+  masked regions at inset(1) so an edge sliver fails CI.
+- The two-layer guarantee is now TESTED: a test-only global
+  (`__PATCHBACK_TEST_ONLY_DISABLE_RASTER_REDACTION__`, not part of
+  public config) disables layer-2 painting; a new acceptance test
+  captures with it set and asserts the masked CSS background is ≤2% its
+  source color and ≥95% redaction fill, password box filled, unmasked
+  control intact. All 4 browser tests green locally.
+- Honest residual (documented in README + DECISIONS): the inset shadow
+  covers the padding box, so border-ring imagery (border-image) relies
+  on the kept `none` suppression plus layer-2 border-box rects.
 
 ## What's done (Phase 7)
 
