@@ -63,7 +63,8 @@ describe('buildDomPath', () => {
 
   it('caps the path at the schema limit', () => {
     // Deeply nested structure with no stable anchors.
-    let html = '<div>'.repeat(400) + '<button>x</button>' + '</div>'.repeat(400);
+    const html =
+      '<div>'.repeat(400) + '<button>x</button>' + '</div>'.repeat(400);
     document.body.innerHTML = html;
     const el = document.querySelector('button') as Element;
     expect(buildDomPath(el).length).toBeLessThanOrEqual(DOM_PATH_MAX_CHARS);
