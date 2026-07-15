@@ -82,7 +82,7 @@ scratch repo (clone step skipped; the PR still opens on GitHub).
    cut or time-lapse this stretch in the GIF.
 6. **PR opens.** `patch.generated` → `pr.opened`, with the PR URL in the
    terminal and a link in the widget thread. Expected PR shape:
-   - branch `patchback/issue-<n>`, linked to the tracking issue;
+   - branch `patchback/job-<jobId>`, linked to the tracking issue;
    - a one-line diff in
      `examples/nextjs-demo/app/components/orders-dashboard.tsx`
      (`Ammount` → `Amount`) — nothing else, no dot-directory artifacts;
@@ -106,7 +106,7 @@ richer loop or restart with the message above.
 
 - On the scratch repo: the merge landed a commit — `git revert` it (or
   reset the scratch repo from upstream) so the flaw is back for the next
-  take. Delete the `patchback/issue-<n>` branch if GitHub didn't.
+  take. Delete the `patchback/job-<jobId>` branch if GitHub didn't.
 - Close the tracking issue if it didn't auto-close with the PR.
 - Ctrl+C both terminals. The dev API keys die with the process; the
   agent's scratch dir under `~/.patchback/jobs/<id>` is deleted after the

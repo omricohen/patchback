@@ -83,7 +83,7 @@ npx patchback dev
    `feedback.received → feedback.triaged [patchable]`.
 4. Click **Start patch** in the widget thread. The agent clones your repo
    into a scratch dir, makes the change, runs the repo's own lint/test
-   scripts, and opens a PR: `patch.queued → patch.running → patch.generated
+   scripts, and opens a PR: `issue.created → patch.queued → patch.running → patch.generated
 → pr.opened`, with the PR link in the terminal and the widget.
 5. Review the PR on GitHub and merge it yourself — Patchback never merges.
    The dev poller notices the merge and walks the job to `feedback.closed`;
