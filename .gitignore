@@ -13,6 +13,7 @@ patchback.config.ts
 node_modules/
 dist/
 coverage/
+.next/
 *.tsbuildinfo
 
 # tooling caches
