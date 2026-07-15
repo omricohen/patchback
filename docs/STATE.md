@@ -1,101 +1,106 @@
 # STATE — where we left off
 
-_Last updated: 2026-07-13_
+_Last updated: 2026-07-15_
 
 ## Current phase
 
-**Phase 6 (API: Fastify + queue + trust tiers) — CODE DONE** on branch
-`phase-6-api` (not merged, not pushed — Omri's call), implemented per the
-approved plan
-(`.a5c/runs/01KX6GMZ9TJBCR1RH3CCNMM77E/artifacts/phase-6-plan.md`).
+**Phase 7 (Widget + React wrapper + SDK) — CODE DONE** on branch
+`phase-7-widget-sdk` (not merged, not pushed — Omri's call), implemented
+per the approved plan
+(`.a5c/runs/01KX6GMZ9TJBCR1RH3CCNMM77E/artifacts/phase-7-plan.md`), all
+open questions resolved as approved (picker visible by default, message
+verbatim, snapdom, `/testing` subpath, playwright infra, Start-patch
+button in-widget, query-stripped URL default).
 Phase 2 (extraction pass) still pending source material in
-`extraction-inbox/`. Next up: **Phase 7 — Widget + SDK** (or merge/review
-of this branch first).
+`extraction-inbox/`. Next up: **Phase 8 — CLI `npx patchback dev`** (or
+merge/review of this branch first).
 
-## What's done (Phase 6)
+## What's done (Phase 7)
 
-- `packages/api` — the orchestrator:
-  - `buildServer(config)` (pure over `ApiConfig`, never reads env):
-    POST /feedback, GET /feedback/:id, POST /feedback/:id/reply,
-    POST /jobs/:id/start, GET /jobs/:id/status, POST /webhooks/github.
-  - Server-side tier assignment ONLY: config API-key→tier map
-    (owner/insider; an outsider key is unrepresentable and rejected at
-    startup), no/unknown key ⇒ outsider, constant-time compare,
-    body-supplied `trustTier` ⇒ 400 (ajv `removeAdditional` off).
-  - `POST /jobs/:id/start` enforces caller tier AND stored-item tier
-    (outsider feedback is data only, even for an owner caller — 403
-    `tier_forbidden` with "data only" message), state gate
-    (`feedback.triaged`, 409) and triage gate (`patchable`, 403
-    `triage_gate`). Issue created synchronously; job CAS-advanced
-    `feedback.triaged → issue.created → patch.queued`.
-  - Replies: new linked item (+`threadId`/`inReplyTo`, additive in
-    @patchback/types) + new job; original stays terminal; effective tier =
-    thread minimum; reply triage sees thread context in DATA blocks
-    (`ThreadContext` added to @patchback/triage, containment-tested).
-  - Workers (`createWorkers`): triage worker (outsider short-circuit
-    upstream in triageFeedback; TriageModelError → queue retry;
-    `needs_human` rests at `feedback.triaged`) and patch worker (guarded
-    brief factory is the only brief producer; deterministic brief fields;
-    failure → `patch.failed` with error preserved; never retried).
-  - Storage: `Store` interface + MemoryStore (dev default, zero deps) +
-    DrizzleStore (pg, CAS `UPDATE … WHERE state=expected`, committed
-    migration `packages/api/migrations/0000_init.sql` with tier/state
-    CHECKs). Runtime `isTrustTier`/`isJobState` fail-closed validation at
-    every boundary (config load, auth, deserialization, prompt path) —
-    Phase 5 carry-over item 2 closed.
-  - Queue: `TaskQueue` + MemoryQueue (FIFO, `onIdle()`, triage×3/patch×1
-    retries) + BullMQQueue (only file importing bullmq).
-  - Webhooks: route exists only with `webhookSecret`; raw-body HMAC
-    (timing-safe) before parsing; handler constructed WITHOUT a
-    GitHubClient (spy-asserted zero outbound calls); merged PR walks
-    `pr.opened → pr.reviewed → patch.shipped → feedback.closed`.
-  - PatchPipeline seam + `createDefaultPatchPipeline` (scratch dir →
-    clone → adapter lifecycle → check-runner → branch/commit/PR),
-    locally tested with a temp git repo and fakes.
-- Repo-wide `pnpm typecheck` covering tests/evals (turbo task + CI step);
-  the GuardedTaskBrief `@ts-expect-error` brand test is now live
-  (verified TS2578 fires if the brand is removed) — carry-over item 1
-  closed. Fixed a latent expect-type misuse it caught in
-  agent-claude-code.
-- Tests: 100+ across the api package — unit (auth, config, webhook
-  verify, tier min, row-mapping corruption), store conformance
-  (parameterized; Drizzle env-gated `PATCHBACK_TEST_DATABASE_URL`),
-  queue (BullMQ env-gated `PATCHBACK_TEST_REDIS_URL`), pipeline, routes
-  (full start-gate matrix), and `test/integration.test.ts` — the phase
-  acceptance: happy path through the exact canonical history, outsider
-  rejection (zero model calls proof + owner-key 403), clarification
-  loop, webhook auth, no-merge spy, patch-failure path.
-- Env-gated suites verified GREEN this session against ephemeral local
-  Postgres 17 + Redis (then torn down); they skip cleanly keyless.
+- `@patchback/sdk` — zero-dep injectable-fetch client for the six-route
+  contract; explicit `ReadAuth` (read token | apiKey, no silent
+  fallback); typed request builders (client-side `trustTier`
+  unrepresentable); `PatchbackApiError` failing closed to `unknown`;
+  `pollJobStatus` (fast→slow at triage, capped backoff + connection
+  callback, hard stop on 404, terminal stop, AbortSignal). Contract
+  tests boot the REAL `buildServer`; poll tests under fake timers.
+- `@patchback/api/testing` — the phase-6 scripted fakes promoted to a
+  shipped subpath; api tests, SDK contract tests, and the playground all
+  consume one copy.
+- `@patchback/widget` — vanilla zero-runtime-dep core (snapdom the one
+  lazy exception), open shadow root, no custom element, host
+  ignore-marked so the widget never captures itself:
+  - **Masking engine (built first):** masked-vs-ignored verbs,
+    nearest-marker resolution, non-overridable password/cc/otp floor
+    (each member test-pinned), open-shadow traversal, fail-closed
+    cross-origin iframes, loud invalid-selector init errors; `scrubText`
+    for captured text (bearer/keys/JWT/email/query/blob).
+  - **Capture defaults per rule 4:** zero-config payload = message +
+    query-stripped URL + capturedAt (exact-snapshot test); config
+    consent for page/console/screenshot; gesture consent + "What will be
+    sent" preview for picker/screenshot; `buildCaptureContext` is the
+    single choke point and requires the engine.
+  - Console ring buffer (wrap not installed without config, errors-only
+    default, scrub-at-insert, reference-safe uninstall), DOM path
+    builder (stable-id preference, generated-id rejection), element
+    picker overlay (page DOM never mutated, ignored elements
+    unpickable), thread view + compile-exhaustive status map + reply
+    gate mirroring the server + presentation-only Start-patch button,
+    visibility-aware polling, memory-first read-token custody
+    (localStorage opt-in).
+  - **Screenshots:** renderer seam; snapdom (pinned 2.12.8) confined to
+    one dynamically-imported file (hygiene test); redaction = clone-stage
+    strip (afterClone) + raster-stage rect painting, independently
+    unit-tested; WebP→JPEG drop-not-violate ladder under 512 KiB.
+  - Vite IIFE bundle (`window.Patchback.create`) alongside tsc ESM.
+- `@patchback/react` — lifecycle-only wrapper (peer `^18||^19`):
+  Provider (SSR/StrictMode-safe, config by identity), `usePatchback`,
+  `usePatchbackStatus`, `PatchbackLauncher`.
+- `apps/widget-playground` — real Vite harness: demo dashboard with
+  sentinel-filled inputs / ignored card / typo'd button; fake-pipeline
+  dev API (real server+workers+memory drivers, keyword-scripted model —
+  `[clarify]`/`[human]` —, delayed fake pipeline, signed
+  `/_dev/merge/:pr` webhook helper); vanilla + React pages; dev proxy
+  (CORS deferred to Phase 8, logged). README documents the manual accept
+  flow.
+- **Acceptance:** jsdom half — masked inputs never in the serialized
+  payload (sentinel proof over picker text/console/title/URL). Browser
+  half — env-gated (`PATCHBACK_BROWSER_TESTS=1`) Playwright Chromium
+  suite runs the whole loop on the real playground: hover-geometry,
+  unpickable ignored card, stored-item sentinel proof + `#export-btn`
+  domPath, screenshot PIXEL uniformity proof over masked regions, status
+  chip walk to Closed via the signed merge webhook, clarification/reply
+  branch. **Verified green locally against installed Chromium this
+  session**; CI gained a dedicated required browser job.
 - Gate green: `pnpm lint && pnpm typecheck && pnpm test && pnpm build`
-  and `pnpm format:check`, zero credentials/services.
+  and `pnpm format:check`, zero credentials/services/browsers by
+  default.
 
 ## Next concrete step
 
-1. Review + merge `phase-6-api` (6 commits).
-2. Run the live triage evals once (still pending from Phase 5, needs
-   `ANTHROPIC_API_KEY`).
-3. Phase 7 — Widget + SDK: the widget consumes
-   `{id, jobId, readToken}` from POST /feedback, polls
-   GET /jobs/:id/status (canonical states, presentation mapping is the
-   widget's job), thread view from GET /feedback/:id, replies via
-   POST /feedback/:id/reply.
+1. Review + merge `phase-7-widget-sdk`.
+2. Phase 8 — CLI `npx patchback dev`: boots API in-memory + workers +
+   local PR-status polling (webhooks can't reach localhost), prints the
+   widget snippet (needs the CORS work — see OPEN_ISSUES), first-run
+   config writer, composes the real pipeline (Claude Code adapter +
+   GitHub token).
+3. Still pending: live triage eval run (`ANTHROPIC_API_KEY`).
 
 ## Context to pick up cleanly
 
-- Phase 6 decisions in `.claude/DECISIONS.md` (eight entries dated
-  2026-07-13): server-side tier map; read tokens; reply/thread model with
-  min-tier; needs_human-as-classification; storage split (SQLite
-  deferred with revisit condition); queue semantics (patch never
-  auto-retried); webhook posture (no client in handler); repo-wide
-  typecheck.
-- New OPEN_ISSUES: PR closed-without-merge unrepresentable (needs an
-  owner-approved canonical-machine revision someday); default pipeline
-  not yet run against real GitHub + agent (Phase 8 CLI composes it);
-  capture context unredacted for read-token holders (accepted for now).
-- PR-status POLLING for local dev (webhooks can't reach localhost) is
-  deferred to Phase 8 per the plan — the store-updating pieces exist;
-  no poll loop shipped.
-- The api package never reads `process.env`; the CLI (Phase 8) owns
-  config loading and supplies the concrete agent adapter
-  (`ApiConfig.adapter` + `repoSource`, or a prebuilt `pipeline`).
+- Phase 7 decisions in `.claude/DECISIONS.md` (ten entries dated
+  2026-07-15): capture defaults/two-tier consent; masking semantics;
+  screenshot seam + two-layer redaction; console posture; widget
+  architecture (open shadow, IIFE+ESM); SDK DTO/contract-test strategy;
+  token custody; `/testing` subpath; env-gated browser acceptance;
+  CORS deferral.
+- New OPEN_ISSUES: API CORS (Phase 8); embedded-key tier implication
+  (documented, revisit = per-user token exchange); closed shadow roots
+  undetectable (fail-closed via renderer opacity, not paint).
+- Dep pins: `@zumer/snapdom@2.12.8` and `playwright@~1.60.0` — aged
+  releases per the no-fresh-packages posture.
+- The widget's `polling: {fastMs, slowMs}` config exists mainly so the
+  playground/acceptance run snappily; SDK defaults are 2500/15000.
+- Browser suite locally: `pnpm --filter widget-playground exec
+playwright install chromium` once, then
+  `PATCHBACK_BROWSER_TESTS=1 pnpm --filter widget-playground test`.
