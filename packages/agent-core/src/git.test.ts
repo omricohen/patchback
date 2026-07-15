@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -11,6 +11,7 @@ import {
   diffNumstat,
   GitCommandError,
   isGitWorkTree,
+  listNewTopLevelDotDirs,
   runGit,
   totalChangedLines,
 } from './git.js';
@@ -107,5 +108,90 @@ describe('git helpers', () => {
     await runGit(workDir, ['add', '.']);
     await runGit(workDir, ['commit', '--quiet', '-m', 'init']);
     expect(await diffNumstat(workDir)).toEqual([]);
+  });
+
+  describe('dot-directory artifact exclusion (privacy boundary)', () => {
+    /** Base commit: one tracked source file + a committed dot-directory. */
+    async function initRepoWithBase(dir: string): Promise<void> {
+      await initRepo(dir);
+      await writeFile(path.join(dir, 'src.txt'), 'one\ntwo\n');
+      await mkdir(path.join(dir, '.config'));
+      await writeFile(path.join(dir, '.config', 'settings.json'), '{}\n');
+      await runGit(dir, ['add', '.']);
+      await runGit(dir, ['commit', '--quiet', '-m', 'init']);
+    }
+
+    it('listNewTopLevelDotDirs reports only dot-dirs absent from HEAD', async () => {
+      await initRepoWithBase(workDir);
+      await mkdir(path.join(workDir, '.a5c', 'cache'), { recursive: true });
+      await mkdir(path.join(workDir, 'plain-dir'));
+      expect(await listNewTopLevelDotDirs(workDir)).toEqual(['.a5c']);
+    });
+
+    it('diffNumstat excludes files in newly created top-level dot-dirs and warns', async () => {
+      await initRepoWithBase(workDir);
+      // The real change…
+      await writeFile(path.join(workDir, 'src.txt'), 'one\nTWO\n');
+      // …plus hook/plugin artifacts written into the clone during the run.
+      await mkdir(path.join(workDir, '.a5c', 'cache'), { recursive: true });
+      await writeFile(
+        path.join(workDir, '.a5c', 'cache', 'foo.json'),
+        '{"cwd":"/Users/someone/private/project"}\n',
+      );
+      await mkdir(path.join(workDir, '.a5c', 'logs'));
+      await writeFile(
+        path.join(workDir, '.a5c', 'logs', 'stop-hook.log'),
+        'hook ran\n',
+      );
+
+      const warnings: string[] = [];
+      const files = await diffNumstat(workDir, {
+        warn: (message) => warnings.push(message),
+      });
+
+      expect(files.map((file) => file.path)).toEqual(['src.txt']);
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toContain('.a5c/');
+      expect(warnings[0]).toMatch(/will not be committed/i);
+    });
+
+    it('keeps changes in dot-dirs that exist in the base commit', async () => {
+      await initRepoWithBase(workDir);
+      await writeFile(
+        path.join(workDir, '.config', 'settings.json'),
+        '{"a":1}\n',
+      );
+      const warnings: string[] = [];
+      const files = await diffNumstat(workDir, {
+        warn: (message) => warnings.push(message),
+      });
+      expect(files.map((file) => file.path)).toEqual([
+        '.config/settings.json',
+      ]);
+      expect(warnings).toEqual([]);
+    });
+
+    it('keeps new top-level dot FILES (the rule targets directories)', async () => {
+      await initRepoWithBase(workDir);
+      await writeFile(path.join(workDir, '.nvmrc'), '20\n');
+      const warnings: string[] = [];
+      const files = await diffNumstat(workDir, {
+        warn: (message) => warnings.push(message),
+      });
+      expect(files.map((file) => file.path)).toEqual(['.nvmrc']);
+      expect(warnings).toEqual([]);
+    });
+
+    it('stays excluded on repeated sweeps of the same tree', async () => {
+      await initRepoWithBase(workDir);
+      await writeFile(path.join(workDir, 'src.txt'), 'one\nTWO\n');
+      await mkdir(path.join(workDir, '.a5c'));
+      await writeFile(path.join(workDir, '.a5c', 'state.json'), '{}\n');
+      const warn = (): void => {};
+      const first = await diffNumstat(workDir, { warn });
+      const second = await diffNumstat(workDir, { warn });
+      expect(first.map((file) => file.path)).toEqual(['src.txt']);
+      expect(second.map((file) => file.path)).toEqual(['src.txt']);
+    });
   });
 });

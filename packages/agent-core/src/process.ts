@@ -11,8 +11,14 @@ export interface RunProcessOptions {
   cwd?: string;
   /** Kill the whole process tree after this long. Default 10 minutes. */
   timeoutMs?: number;
-  /** Extra environment merged over process.env. */
+  /** Extra environment merged over process.env (see `inheritEnv`). */
   env?: Record<string, string>;
+  /**
+   * When false, the child receives ONLY `env` — nothing is inherited from
+   * process.env. Used by adapters that must isolate a spawned CLI from the
+   * caller's configuration. Default true (merge `env` over process.env).
+   */
+  inheritEnv?: boolean;
   /** Text written to the child's stdin (then closed). */
   input?: string;
 }
@@ -45,7 +51,10 @@ export function runProcess(
     // group so a timeout kill takes the whole tree down, not just the parent.
     const child = spawn(command, args, {
       cwd: options?.cwd,
-      env: { ...process.env, ...options?.env },
+      env:
+        options?.inheritEnv === false
+          ? { ...options.env }
+          : { ...process.env, ...options?.env },
       stdio: [options?.input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
       shell: !posix,
       detached: posix,
