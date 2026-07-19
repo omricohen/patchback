@@ -30,8 +30,10 @@ describe('vite plugin', () => {
   it('dev: sets jsxImportSource and injects the discovered repo root', () => {
     const plugin = hooks(patchbackProvenance());
     const config = plugin.config({}, { command: 'serve', mode: 'development' });
+    // Against Vite ≥8 (this repo) the oxc option carries the import source;
+    // on older Vite the esbuild option would instead.
     expect(config).toEqual({
-      esbuild: { jsxImportSource: '@patchback/provenance' },
+      oxc: { jsx: { importSource: '@patchback/provenance' } },
     });
     const tags = plugin.transformIndexHtml();
     expect(tags).toHaveLength(1);

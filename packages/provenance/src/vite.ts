@@ -19,6 +19,7 @@
  * statically injects attributes instead.
  */
 import type { Plugin } from 'vite';
+import { version as viteVersion } from 'vite';
 
 import { findRepoRoot } from './node.js';
 import { PROVENANCE_ROOT_GLOBAL } from './core.js';
@@ -55,6 +56,14 @@ export function patchbackProvenance(
       repoRoot = options.root ?? findRepoRoot(projectRoot) ?? projectRoot;
       if (!serve) {
         return {};
+      }
+      // Vite ≥8 transforms with oxc (`esbuild` options are deprecated and
+      // ignored when oxc options exist); older Vite uses esbuild.
+      const major = Number.parseInt(viteVersion.split('.')[0] ?? '0', 10);
+      if (major >= 8) {
+        return {
+          oxc: { jsx: { importSource: '@patchback/provenance' } },
+        };
       }
       return {
         esbuild: { jsxImportSource: '@patchback/provenance' },

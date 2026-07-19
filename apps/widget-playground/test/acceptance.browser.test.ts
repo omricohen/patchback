@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -23,6 +24,31 @@ const ENABLED = process.env.PATCHBACK_BROWSER_TESTS === '1';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const VITE_PORT = 5199;
 const PAGE_URL = `http://127.0.0.1:${VITE_PORT}/`;
+const REACT_PAGE_URL = `http://127.0.0.1:${VITE_PORT}/react.html`;
+
+/** Repo-root-relative path of the annotated react page source. */
+const REACT_MAIN_RELATIVE = 'apps/widget-playground/src/react-main.tsx';
+
+/**
+ * The 1-based line the dev transform stamps for a JSX element: the line
+ * where its opening tag STARTS. Computed from the source at test runtime —
+ * scan for the marker attribute, then walk up to the nearest opening tag —
+ * so nothing here rots when react-main.tsx is edited or reformatted.
+ */
+function expectedJsxLine(markerAttribute: string, tagName: string): number {
+  const source = readFileSync(join(ROOT, 'src', 'react-main.tsx'), 'utf8');
+  const lines = source.split('\n');
+  const markerIndex = lines.findIndex((line) => line.includes(markerAttribute));
+  if (markerIndex === -1) {
+    throw new Error(`marker ${markerAttribute} not found in react-main.tsx`);
+  }
+  for (let i = markerIndex; i >= 0; i -= 1) {
+    if ((lines[i] as string).includes(`<${tagName}`)) {
+      return i + 1;
+    }
+  }
+  throw new Error(`no <${tagName} above marker ${markerAttribute}`);
+}
 
 /** The redaction fill (REDACTION_FILL in the widget) as RGB. */
 const FILL = { r: 0x24, g: 0x2a, b: 0x33 };
@@ -303,6 +329,13 @@ describe.skipIf(!ENABLED)('playground browser acceptance', () => {
     expect(item?.capture?.element?.text).toContain('Expot CSV');
     expect(item?.capture?.url).toBe(PAGE_URL);
     expect(item?.trustTier).toBe('insider');
+    // NEGATIVE CONTROL: the vanilla page has no provenance plugin and no
+    // manual data-pb-source attributes — the payload must stay hint-free,
+    // with no sourceHint key at all.
+    expect(
+      'sourceHint' in
+        ((item?.capture?.element ?? {}) as Record<string, unknown>),
+    ).toBe(false);
 
     // --- Screenshot pixel proof: masked regions are UNIFORMLY the
     // redaction fill. ---
@@ -349,6 +382,100 @@ describe.skipIf(!ENABLED)('playground browser acceptance', () => {
     expect(merge.status).toBe(200);
     await waitForChipState('feedback.closed');
     await page.waitForSelector('text=Closed');
+  }, 120_000);
+
+  it('provenance: picking an annotated JSX element carries the REAL file:line', async () => {
+    await page.goto(REACT_PAGE_URL);
+
+    // The dev transform must have stamped the JSX button with the
+    // repo-root-relative path (root discovery proof: the vite root is
+    // apps/widget-playground, but the stamp is repo-relative).
+    const stamped = await page
+      .locator('#pb-typo-btn')
+      .getAttribute('data-pb-source');
+    const expectedButtonLine = expectedJsxLine('id="pb-typo-btn"', 'button');
+    expect(stamped).toBe(`${REACT_MAIN_RELATIVE}:${expectedButtonLine}`);
+
+    await page.getByRole('button', { name: 'Feedback (React)' }).click();
+    await page.fill(
+      '.pb-panel textarea',
+      'The JSON export button says "Expot" instead of "Export"',
+    );
+    await page.getByRole('button', { name: 'Point at the problem' }).click();
+    // The React strip renders below the vanilla dashboard — bring the
+    // target into the viewport (the picker works in client coordinates).
+    await page.locator('#pb-typo-btn').scrollIntoViewIfNeeded();
+    const target = await page.locator('#pb-typo-btn').boundingBox();
+    expect(target).not.toBeNull();
+    const cx = (target?.x ?? 0) + (target?.width ?? 0) / 2;
+    const cy = (target?.y ?? 0) + (target?.height ?? 0) / 2;
+    await page.mouse.move(cx, cy);
+    await page.waitForSelector('.pb-picker-box');
+    await page.mouse.click(cx, cy);
+    await page.waitForSelector('[data-preview="element"]');
+
+    // GESTURE CONSENT SURFACE: the hint is visible in the "What will be
+    // sent" preview before anything is submitted.
+    const previewSource = await page
+      .locator('[data-preview-source]')
+      .textContent();
+    expect(previewSource).toContain(
+      `source: ${REACT_MAIN_RELATIVE}:${expectedButtonLine}`,
+    );
+
+    await page
+      .getByRole('dialog')
+      .getByRole('button', { name: 'Send feedback' })
+      .click();
+    await waitForChipState('feedback.triaged');
+
+    const feedbackId = api.createdFeedbackIds.at(-1) as string;
+    const item = await api.store.getFeedback(feedbackId);
+    expect(item?.capture?.element?.domPath).toBe('#pb-typo-btn');
+    const hint = item?.capture?.element?.sourceHint;
+    // Repo-relative shape…
+    expect(hint).toMatch(/^apps\/widget-playground\/src\/react-main\.tsx:\d+$/);
+    // …and the EXACT line computed from the source file at test runtime.
+    expect(hint).toBe(`${REACT_MAIN_RELATIVE}:${expectedButtonLine}`);
+    // The stored payload never carries an absolute path anywhere.
+    expect(JSON.stringify(item)).not.toContain(ROOT);
+  }, 120_000);
+
+  it('provenance: a raw-HTML child falls back to the annotated ANCESTOR', async () => {
+    await page.goto(REACT_PAGE_URL);
+
+    // The dangerouslySetInnerHTML child itself is unstamped…
+    const childStamp = await page
+      .locator('#pb-html-child')
+      .getAttribute('data-pb-source');
+    expect(childStamp).toBeNull();
+    // …its wrapper (real JSX) is stamped.
+    const wrapperLine = expectedJsxLine('id="pb-html-wrapper"', 'div');
+
+    await page.getByRole('button', { name: 'Feedback (React)' }).click();
+    await page.fill('.pb-panel textarea', 'The raw HTML child looks off');
+    await page.getByRole('button', { name: 'Point at the problem' }).click();
+    await page.locator('#pb-html-child').scrollIntoViewIfNeeded();
+    const target = await page.locator('#pb-html-child').boundingBox();
+    expect(target).not.toBeNull();
+    const cx = (target?.x ?? 0) + (target?.width ?? 0) / 2;
+    const cy = (target?.y ?? 0) + (target?.height ?? 0) / 2;
+    await page.mouse.move(cx, cy);
+    await page.waitForSelector('.pb-picker-box');
+    await page.mouse.click(cx, cy);
+    await page.waitForSelector('[data-preview="element"]');
+    await page
+      .getByRole('dialog')
+      .getByRole('button', { name: 'Send feedback' })
+      .click();
+    await waitForChipState('feedback.triaged');
+
+    const feedbackId = api.createdFeedbackIds.at(-1) as string;
+    const item = await api.store.getFeedback(feedbackId);
+    expect(item?.capture?.element?.domPath).toBe('#pb-html-child');
+    expect(item?.capture?.element?.sourceHint).toBe(
+      `${REACT_MAIN_RELATIVE}:${wrapperLine}`,
+    );
   }, 120_000);
 
   it('runs the clarification branch: question → reply → NEW job advances', async () => {
