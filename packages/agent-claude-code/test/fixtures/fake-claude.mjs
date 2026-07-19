@@ -206,6 +206,30 @@ switch (mode) {
     }
     break;
   }
+  case 'repair-cumulative': {
+    // Isolates cumulative-vs-delta ceiling accounting. 1st: break the label and
+    // add a modest filler file — under the ceiling, but checks FAIL. Repair:
+    // FIX the label (checks pass) and append a few more filler lines. The repair
+    // DELTA alone stays under the ceiling, so a delta-only measurement would let
+    // the job succeed; only the CUMULATIVE diff (original filler + label edit +
+    // repair filler) crosses it. Correct code must fail on the ceiling here.
+    const file = process.env.FAKE_CLAUDE_TARGET_FILE ?? 'src/button.js';
+    const from = process.env.FAKE_CLAUDE_FROM ?? 'Save changes';
+    const to = process.env.FAKE_CLAUDE_TO ?? 'Submit changes';
+    const content = readFileSync(file, 'utf8');
+    if (run === 1) {
+      writeFileSync(file, content.replace(`label: '${from}'`, "label: ''"));
+      const lines = Array.from({ length: 18 }, (_, i) => `const a${i} = ${i};`);
+      writeFileSync('filler.js', lines.join('\n') + '\n');
+      printResult('Set the label to empty and added a filler module.');
+    } else {
+      writeFileSync(file, content.replace("label: ''", `label: '${to}'`));
+      const extra = Array.from({ length: 12 }, (_, i) => `const b${i} = ${i};`);
+      writeFileSync('filler.js', readFileSync('filler.js', 'utf8') + extra.join('\n') + '\n');
+      printResult(`Repaired the label to ${JSON.stringify(to)} and extended filler.`);
+    }
+    break;
+  }
   case 'garbage': {
     // Non-JSON output, but the edit still happens — the diff is what counts.
     const file = process.env.FAKE_CLAUDE_TARGET_FILE ?? 'src/button.js';

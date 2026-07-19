@@ -63,7 +63,7 @@ interface ScenarioResult {
 /** Run one repair scenario through the real adapter + fake CLI + check-runner. */
 async function runScenario(
   mode: string,
-  opts: { repairEnabled?: boolean } = {},
+  opts: { repairEnabled?: boolean; maxChangedLines?: number } = {},
 ): Promise<ScenarioResult> {
   const counterPath = path.join(controlDir, 'counter');
   const promptDir = path.join(controlDir, 'prompts');
@@ -71,6 +71,9 @@ async function runScenario(
     binaryPath: process.execPath,
     binaryArgs: [fakeCliPath()],
     cliFlags: ['-p', '--output-format', 'json'],
+    ...(opts.maxChangedLines !== undefined
+      ? { maxChangedLines: opts.maxChangedLines }
+      : {}),
     env: {
       FAKE_CLAUDE_MODE: mode,
       FAKE_CLAUDE_COUNTER: counterPath,
@@ -174,6 +177,25 @@ describe('bounded repair loop (fake CLI)', () => {
     // ...and it is attributed to the repair, i.e. the CUMULATIVE diff.
     expect(outcome.error).toContain('automated repair attempt');
     expect(outcome.execution.success).toBe(false);
+  }, 60_000);
+
+  it('(c2) ceiling is CUMULATIVE, not per-attempt: repair fixes checks but the combined diff still fails', async () => {
+    // ceiling 30: run 1 = label break + 18-line filler (~20, under); repair =
+    // label fix + 12 more filler lines (repair delta ~12, under). Cumulative
+    // ~32 > 30. A delta-only measurement would see a small, check-passing repair
+    // and ship it; correct cumulative accounting must fail on the ceiling.
+    const { outcome, buttonContent } = await runScenario('repair-cumulative', {
+      maxChangedLines: 30,
+    });
+
+    expect(await invocationCount()).toBe(2);
+    expect(outcome.repairAttempts).toBe(1);
+    // The repair genuinely FIXED the checks — proving this isn't a checks failure.
+    expect(buttonContent).toContain(`label: '${NEW_LABEL}'`);
+    // ...yet the job fails, and only the cumulative ceiling can explain it.
+    expect(outcome.ok).toBe(false);
+    expect(outcome.error).toContain('Diff too large');
+    expect(outcome.error).toContain('automated repair attempt');
   }, 60_000);
 
   it('(d) repair disabled: immediate failure, no second invocation', async () => {
