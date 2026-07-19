@@ -27,7 +27,7 @@ lint/tests → PR → human review → status back to widget
 | `packages/sdk`               | Client SDK: submit, thread, status                                                                                                                              |
 | `packages/api`               | Fastify app: feedback, jobs, webhooks; Drizzle/Postgres; BullMQ with in-memory fallback                                                                         |
 | `packages/github`            | Token + App modes; issues/branches/PRs                                                                                                                          |
-| `packages/agent-core`        | Adapter interface (prepare, plan, execute, summarize), planner, repo-reader, scratch-dir lifecycle, check-runner                                                |
+| `packages/agent-core`        | Adapter interface (prepare, plan, execute, summarize), planner, repo-reader, scratch-dir lifecycle, check-runner, bounded repair loop (v0.2)                    |
 | `packages/agent-claude-code` | Default adapter: spawns Claude Code CLI headless, diff-size ceiling (default ~300 lines)                                                                        |
 | `packages/triage`            | Classifier + evals: `patchable` \| `needs_clarification` \| `needs_human`                                                                                       |
 | `packages/cli`               | `patchback` CLI incl. `npx patchback dev`                                                                                                                       |
@@ -65,6 +65,15 @@ Invalid transitions throw. `packages/types` is the single source of truth.
    render it as a starting point the agent must verify before editing; the
    emitting side never writes absolute paths into the DOM (fail-closed
    relativization against the repo root).
+7. **Repair feedback is tool output, never user instructions (v0.2).** When a
+   patch's post-execution checks fail, agent-core runs at most ONE bounded
+   repair invocation, feeding the agent the failing checks' own output
+   (which check, its command, its output tail) as clearly-delimited
+   diagnostic DATA — never submitter-controlled text. The diff ceiling is
+   enforced across the cumulative diff (original + repair); `patch.failed`
+   only after the repair also fails; no new job states (the loop is internal
+   to `patch.running`). Repair is on by default and can be disabled, but the
+   one-attempt cap is fixed in v0.2.
 
 ## Local-first constraint
 

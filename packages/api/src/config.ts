@@ -55,6 +55,13 @@ export interface ApiConfig {
   /** Base branch PRs target. Defaults to the repo's default branch. */
   baseBranch?: string;
   /**
+   * Bounded self-repair after failing checks, for the default pipeline. ON by
+   * default (one attempt); set `{ enabled: false }` to fail immediately on the
+   * first check failure. The one-attempt cap is fixed in v0.2 and not
+   * configurable upward. Ignored when `pipeline` is supplied directly.
+   */
+  repair?: { enabled?: boolean };
+  /**
    * GitHub webhook HMAC secret. The /webhooks/github route is registered
    * ONLY when this is set — there is no "verification disabled" mode.
    */
@@ -173,5 +180,6 @@ export function resolvePipeline(config: ApiConfig): PatchPipeline {
       ? { baseBranch: config.baseBranch }
       : {}),
     ...(config.log !== undefined ? { log: config.log } : {}),
+    ...(config.repair !== undefined ? { repair: config.repair } : {}),
   });
 }

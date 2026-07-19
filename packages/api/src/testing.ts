@@ -162,6 +162,7 @@ export function createFakePipeline(result?: PatchPipelineResult): FakePipeline {
           branch: `patchback/job-${job.id}`,
           prNumber: 501,
           prUrl: 'https://github.com/acme/demo/pull/501',
+          repairAttempts: 0,
         }
       );
     },

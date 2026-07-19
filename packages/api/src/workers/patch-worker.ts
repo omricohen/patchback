@@ -71,8 +71,12 @@ export async function runPatchTask(
 
     const result = await pipeline.run(brief, running);
     if (result.ok) {
+      const repairNote =
+        result.repairAttempts > 0
+          ? ` (checks failed; ran ${result.repairAttempts} repair attempt)`
+          : '';
       let updated = transitionJob(running, 'patch.generated', {
-        note: `branch ${result.branch}`,
+        note: `branch ${result.branch}${repairNote}`,
       });
       updated = transitionJob(updated, 'pr.opened', {
         note: `PR #${result.prNumber}`,

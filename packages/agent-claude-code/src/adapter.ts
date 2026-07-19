@@ -200,7 +200,12 @@ export function createClaudeCodeAdapter(
     },
 
     async execute(ctx) {
-      const prompt = buildPrompt(ctx.brief, ctx.conventions, maxChangedLines);
+      const prompt = buildPrompt(
+        ctx.brief,
+        ctx.conventions,
+        maxChangedLines,
+        ctx.repair,
+      );
       const args = [...binaryArgs, ...cliFlags, ...isolationFlags];
 
       // Per-job empty config dir: the CLI must never see the machine's
@@ -266,6 +271,12 @@ export function createClaudeCodeAdapter(
       }
 
       if (changedLines > maxChangedLines) {
+        const repairNote =
+          ctx.repair !== undefined
+            ? ' This happened during the automated repair attempt: the ' +
+              'cumulative diff of the original change plus the repair exceeds ' +
+              'the ceiling.'
+            : '';
         return fail(
           ctx,
           `Diff too large: ${changedLines} changed lines across ` +
@@ -273,7 +284,7 @@ export function createClaudeCodeAdapter(
             `${maxChangedLines}. A patchable feedback item should be a ` +
             'small, focused change — a diff this size usually means triage ' +
             'misclassified the item. Failing the job; route this feedback ' +
-            'to a human instead of retrying.',
+            `to a human instead of retrying.${repairNote}`,
           {
             changedFiles,
             totalChangedLines: changedLines,

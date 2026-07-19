@@ -12,5 +12,6 @@ export * from './adapter.js';
 export * from './scratch-dir.js';
 export * from './repo-reader.js';
 export * from './check-runner.js';
+export * from './execute-with-repair.js';
 export * from './git.js';
 export * from './process.js';

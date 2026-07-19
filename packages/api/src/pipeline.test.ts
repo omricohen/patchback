@@ -13,8 +13,11 @@ import type {
 import {
   createBriefFromTriagedFeedback,
   diffNumstat,
+  readRepoConventions,
   runGit,
   totalChangedLines,
+  type AgentPlan,
+  type RepairContext,
 } from '@patchback/agent-core';
 import type { FeedbackItem, Job } from '@patchback/types';
 
@@ -143,6 +146,7 @@ describe('createDefaultPatchPipeline', () => {
       branch: patchBranchName(job.id),
       prNumber: 501,
       prUrl: 'https://github.com/acme/demo/pull/501',
+      repairAttempts: 0,
     });
     expect(adapter.lifecycle).toEqual([
       'prepare',
@@ -182,6 +186,7 @@ describe('createDefaultPatchPipeline', () => {
     expect(result).toEqual({
       ok: false,
       error: 'diff ceiling exceeded: triage likely misclassified this item',
+      repairAttempts: 0,
     });
     expect(github.callLog).toEqual([]);
     expect(await readdir(path.join(baseDir, 'scratch-fail'))).toEqual([]);
@@ -224,7 +229,11 @@ describe('createDefaultPatchPipeline', () => {
       scratchBaseDir: path.join(baseDir, 'scratch-empty'),
     });
     const result = await pipeline.run(makeBrief(), makeJob());
-    expect(result).toEqual({ ok: false, error: 'agent changed no files' });
+    expect(result).toEqual({
+      ok: false,
+      error: 'agent changed no files',
+      repairAttempts: 0,
+    });
     expect(github.callLog).toEqual([]);
   });
 
@@ -353,8 +362,40 @@ describe('createDefaultPatchPipeline', () => {
       log: () => {},
     });
     const result = await pipeline.run(makeBrief(), makeJob());
-    expect(result).toEqual({ ok: false, error: 'agent changed no files' });
+    expect(result).toEqual({
+      ok: false,
+      error: 'agent changed no files',
+      repairAttempts: 0,
+    });
     expect(github.callLog).toEqual([]);
+  });
+
+  it('a successful run reports repairAttempts: 0 when checks pass first try', async () => {
+    const github = createFakeGitHubClient();
+    const adapter = makeAdapter(async (ctx) => {
+      await writeFile(
+        path.join(ctx.workDir, 'greeting.txt'),
+        'Hello world\n',
+        'utf8',
+      );
+      return {
+        success: true,
+        changedFiles: [
+          { path: 'greeting.txt', additions: 1, deletions: 1, binary: false },
+        ],
+        totalChangedLines: 2,
+      };
+    });
+    const pipeline = createDefaultPatchPipeline({
+      adapter,
+      githubClient: github,
+      repoSource: sourceRepo,
+      baseBranch: 'main',
+      scratchBaseDir: path.join(baseDir, 'scratch-norepair'),
+    });
+    const result = await pipeline.run(makeBrief(), makeJob());
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.repairAttempts).toBe(0);
   });
 
   it('a throwing adapter is caught and reported, scratch dir still removed', async () => {
@@ -369,7 +410,141 @@ describe('createDefaultPatchPipeline', () => {
       scratchBaseDir: path.join(baseDir, 'scratch-throw'),
     });
     const result = await pipeline.run(makeBrief(), makeJob());
-    expect(result).toEqual({ ok: false, error: 'agent binary not found' });
+    expect(result).toEqual({
+      ok: false,
+      error: 'agent binary not found',
+      repairAttempts: 0,
+    });
     expect(await readdir(path.join(baseDir, 'scratch-throw'))).toEqual([]);
+  });
+});
+
+/**
+ * The repair loop, driven through the real check-runner: a repo whose `test`
+ * script requires the word "world" in greeting.txt. A stateful adapter breaks
+ * it on the first execute, then (only when handed a repair context) fixes it.
+ */
+describe('createDefaultPatchPipeline — bounded repair', () => {
+  let checkRepo: string;
+
+  beforeAll(async () => {
+    checkRepo = path.join(baseDir, 'check-source');
+    await mkdir(path.join(checkRepo, 'scripts'), { recursive: true });
+    await writeFile(
+      path.join(checkRepo, 'package.json'),
+      JSON.stringify(
+        {
+          name: 'check-fixture',
+          version: '1.0.0',
+          private: true,
+          scripts: { test: 'node scripts/check.mjs' },
+        },
+        null,
+        2,
+      ) + '\n',
+    );
+    await writeFile(
+      path.join(checkRepo, 'package-lock.json'),
+      JSON.stringify({ name: 'check-fixture', lockfileVersion: 3 }) + '\n',
+    );
+    await writeFile(
+      path.join(checkRepo, 'scripts', 'check.mjs'),
+      [
+        "import { readFileSync } from 'node:fs';",
+        "if (!readFileSync('greeting.txt', 'utf8').includes('world')) {",
+        "  console.error('greeting.txt is missing the word world');",
+        '  process.exit(1);',
+        '}',
+        '',
+      ].join('\n'),
+    );
+    // Base greeting has the typo; the agent's job is to fix it.
+    await writeFile(path.join(checkRepo, 'greeting.txt'), 'Hello wrold\n');
+    await runGit(checkRepo, ['init', '--quiet', '--initial-branch=main']);
+    await runGit(checkRepo, ['config', 'user.email', 't@t.invalid']);
+    await runGit(checkRepo, ['config', 'user.name', 'T']);
+    await runGit(checkRepo, ['add', '.']);
+    await runGit(checkRepo, ['commit', '--quiet', '-m', 'init']);
+  });
+
+  /**
+   * Adapter that reads real conventions in prepare (so the check-runner runs),
+   * writes a still-broken greeting on the first execute, and only writes the
+   * correct greeting when it is handed a repair context. Records the repair
+   * context seen on each call.
+   */
+  function repairAdapter(): {
+    adapter: ReturnType<typeof makeAdapter>;
+    repairSeen: (RepairContext | undefined)[];
+  } {
+    const repairSeen: (RepairContext | undefined)[] = [];
+    const base = makeAdapter(async (ctx) => {
+      repairSeen.push(ctx.repair);
+      const target = path.join(ctx.workDir, 'greeting.txt');
+      await writeFile(
+        target,
+        ctx.repair === undefined ? 'Hello wrld\n' : 'Hello world\n',
+      );
+      const changed = await diffNumstat(ctx.workDir);
+      return {
+        success: true,
+        changedFiles: changed,
+        totalChangedLines: totalChangedLines(changed),
+      };
+    });
+    base.prepare = async (ctx): Promise<void> => {
+      ctx.conventions = await readRepoConventions(ctx.workDir);
+    };
+    base.plan = async (): Promise<AgentPlan> => ({ steps: ['fix typo'] });
+    return { adapter: base, repairSeen };
+  }
+
+  it('(a) fail-then-fix: one repair makes checks pass → PR opens', async () => {
+    const github = createFakeGitHubClient();
+    const { adapter, repairSeen } = repairAdapter();
+    const pipeline = createDefaultPatchPipeline({
+      adapter,
+      githubClient: github,
+      repoSource: checkRepo,
+      baseBranch: 'main',
+      scratchBaseDir: path.join(baseDir, 'scratch-repair-fix'),
+    });
+    const result = await pipeline.run(makeBrief(), makeJob());
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.repairAttempts).toBe(1);
+      expect(result.prNumber).toBe(501);
+    }
+    // Two executes: the first with no repair ctx, the second WITH it.
+    expect(repairSeen).toHaveLength(2);
+    expect(repairSeen[0]).toBeUndefined();
+    expect(repairSeen[1]?.attempt).toBe(1);
+    expect(repairSeen[1]?.failingChecks[0]?.name).toBe('test');
+    expect(github.commits[0]?.files).toEqual([
+      { path: 'greeting.txt', content: 'Hello world\n' },
+    ]);
+  });
+
+  it('(d) repair disabled: first check failure fails immediately, one execute', async () => {
+    const github = createFakeGitHubClient();
+    const { adapter, repairSeen } = repairAdapter();
+    const pipeline = createDefaultPatchPipeline({
+      adapter,
+      githubClient: github,
+      repoSource: checkRepo,
+      baseBranch: 'main',
+      scratchBaseDir: path.join(baseDir, 'scratch-repair-off'),
+      repair: { enabled: false },
+    });
+    const result = await pipeline.run(makeBrief(), makeJob());
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.repairAttempts).toBe(0);
+      expect(result.error).toContain('target repo checks failed');
+    }
+    expect(repairSeen).toEqual([undefined]); // exactly one execute, no repair
+    expect(github.callLog).toEqual([]); // nothing reached GitHub
   });
 });

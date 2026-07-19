@@ -10,8 +10,11 @@ import {
   checkoutNewBranch,
   cloneRepository,
   detectAndRunChecks,
+  executeWithRepair,
   listNewTopLevelDotDirs,
   withScratchDir,
+  type ChangedFile,
+  type ChecksReport,
 } from '@patchback/agent-core';
 import type { FileChange, GitHubClient } from '@patchback/github';
 import type { Job } from '@patchback/types';
@@ -28,11 +31,28 @@ import type { Job } from '@patchback/types';
  * invoked with outsider-derived instructions by construction.
  */
 export type PatchPipelineResult =
-  | { ok: true; branch: string; prNumber: number; prUrl: string }
-  | { ok: false; error: string };
+  | {
+      ok: true;
+      branch: string;
+      prNumber: number;
+      prUrl: string;
+      /** 0 when checks passed first try, 1 when a repair attempt was made. */
+      repairAttempts: number;
+    }
+  | { ok: false; error: string; repairAttempts: number };
 
 export interface PatchPipeline {
   run(brief: GuardedTaskBrief, job: Job): Promise<PatchPipelineResult>;
+}
+
+/**
+ * Bounded self-repair after failing checks. On by default; v0.2 allows exactly
+ * one attempt (see `MAX_REPAIR_ATTEMPTS` in agent-core), and that cap is NOT
+ * configurable upward here — repair can only be turned off.
+ */
+export interface RepairOptions {
+  /** Default true. Set false to fail immediately on the first check failure. */
+  enabled?: boolean;
 }
 
 export interface DefaultPipelineOptions {
@@ -46,6 +66,8 @@ export interface DefaultPipelineOptions {
   scratchBaseDir?: string;
   /** Sink for operational warnings (e.g. dropped artifacts). Default console.warn. */
   log?: (message: string) => void;
+  /** Bounded repair after failing checks. Default: enabled, one attempt. */
+  repair?: RepairOptions;
 }
 
 /** Working branch name for a job. */
@@ -71,6 +93,7 @@ export function createDefaultPatchPipeline(
   const { adapter, githubClient, repoSource, baseBranch, scratchBaseDir } =
     options;
   const log = options.log ?? ((message: string): void => console.warn(message));
+  const repairEnabled = options.repair?.enabled ?? true;
 
   return {
     async run(brief: GuardedTaskBrief, job: Job): Promise<PatchPipelineResult> {
@@ -86,57 +109,68 @@ export function createDefaultPatchPipeline(
             const ctx: AgentContext = { jobId: job.id, brief, workDir };
             await adapter.prepare(ctx);
             await adapter.plan(ctx);
-            const execution = await adapter.execute(ctx);
-            if (!execution.success) {
+
+            // Execute, run the repo's checks, and — if they fail and repair is
+            // enabled — run exactly one bounded repair invocation before
+            // re-checking. The whole loop is internal to patch.running; the
+            // diff ceiling is enforced cumulatively by the adapter's execute().
+            const runChecks = (): Promise<ChecksReport> =>
+              detectAndRunChecks(
+                workDir,
+                ctx.conventions?.scripts ?? {},
+                ctx.conventions?.packageManager !== undefined
+                  ? { packageManager: ctx.conventions.packageManager }
+                  : undefined,
+              );
+            const outcome = await executeWithRepair({
+              adapter,
+              ctx,
+              runChecks,
+              repairEnabled,
+              log,
+            });
+            if (!outcome.ok) {
               return {
                 ok: false as const,
-                error: execution.error ?? 'agent execution failed',
+                error: outcome.error ?? 'agent execution failed',
+                repairAttempts: outcome.repairAttempts,
               };
             }
+            const { repairAttempts } = outcome;
+
             // Privacy boundary, second layer (the adapter's diff sweep is
             // the first): never commit files under a top-level dot-directory
             // that appeared during the run but is not part of the base
             // commit — those are local tool artifacts (hook logs, plugin
             // caches) that can carry machine-local paths into a public PR.
             const artifactDirs = new Set(await listNewTopLevelDotDirs(workDir));
-            const changedFiles = execution.changedFiles.filter((file) => {
-              const [top] = file.path.split('/');
-              if (top !== undefined && artifactDirs.has(top)) {
-                log(
-                  `Refusing to commit "${file.path}": "${top}/" is a newly ` +
-                    'created top-level dot-directory, not part of the ' +
-                    'repository — treating it as a local tool artifact.',
-                );
-                return false;
-              }
-              return true;
-            });
+            const changedFiles = outcome.execution.changedFiles.filter(
+              (file: ChangedFile) => {
+                const [top] = file.path.split('/');
+                if (top !== undefined && artifactDirs.has(top)) {
+                  log(
+                    `Refusing to commit "${file.path}": "${top}/" is a newly ` +
+                      'created top-level dot-directory, not part of the ' +
+                      'repository — treating it as a local tool artifact.',
+                  );
+                  return false;
+                }
+                return true;
+              },
+            );
             if (changedFiles.length === 0) {
-              return { ok: false as const, error: 'agent changed no files' };
+              return {
+                ok: false as const,
+                error: 'agent changed no files',
+                repairAttempts,
+              };
             }
             const binary = changedFiles.find((file) => file.binary);
             if (binary !== undefined) {
               return {
                 ok: false as const,
                 error: `agent changed a binary file (${binary.path}); binary changes are not supported in v0.1`,
-              };
-            }
-
-            const checks = await detectAndRunChecks(
-              workDir,
-              ctx.conventions?.scripts ?? {},
-              ctx.conventions?.packageManager !== undefined
-                ? { packageManager: ctx.conventions.packageManager }
-                : undefined,
-            );
-            if (!checks.allPassed) {
-              const failed = checks.ran
-                .filter((check) => !check.passed)
-                .map((check) => `${check.name} (${check.command})`)
-                .join(', ');
-              return {
-                ok: false as const,
-                error: `target repo checks failed: ${failed}`,
+                repairAttempts,
               };
             }
 
@@ -178,6 +212,7 @@ export function createDefaultPatchPipeline(
               branch,
               prNumber: pr.number,
               prUrl: pr.url,
+              repairAttempts,
             };
           },
           scratchBaseDir !== undefined
@@ -188,6 +223,7 @@ export function createDefaultPatchPipeline(
         return {
           ok: false,
           error: error instanceof Error ? error.message : String(error),
+          repairAttempts: 0,
         };
       }
     },
