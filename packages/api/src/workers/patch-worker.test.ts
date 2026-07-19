@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
+import { createBriefFromTriagedFeedback } from '@patchback/agent-core';
 import type { FeedbackItem, Job } from '@patchback/types';
 import { INITIAL_JOB_STATE, transitionJob } from '@patchback/types';
 
@@ -13,7 +14,7 @@ import { generateId, generateReadToken, hashReadToken } from '../ids.js';
 import type { PatchPipeline } from '../pipeline.js';
 import { MemoryQueue } from '../queue/memory.js';
 import { MemoryStore } from '../store/memory.js';
-import { runPatchTask } from './patch-worker.js';
+import { buildBriefFields, runPatchTask } from './patch-worker.js';
 
 async function seedQueuedJob(
   store: MemoryStore,
@@ -114,5 +115,72 @@ describe('patch-worker success-path CAS', () => {
     expect(logged[0]).toContain(job.id);
     expect(logged[0]).toContain('PR #777');
     expect(logged[0]).toContain('CAS');
+  });
+});
+
+describe('buildBriefFields — sourceHint threading', () => {
+  function itemWith(capture?: FeedbackItem['capture']): FeedbackItem {
+    const at = new Date().toISOString();
+    return {
+      id: 'fb-hint',
+      message: 'The button says "Sumbit" instead of "Submit".',
+      trustTier: 'owner',
+      ...(capture !== undefined ? { capture } : {}),
+      createdAt: at,
+      updatedAt: at,
+    };
+  }
+
+  it('threads capture.element.sourceHint into the brief fields verbatim', () => {
+    const fields = buildBriefFields(
+      itemWith({
+        element: { domPath: '#btn', sourceHint: 'src/Toolbar.tsx:42' },
+      }),
+      undefined,
+      {},
+    );
+    expect(fields.sourceHint).toBe('src/Toolbar.tsx:42');
+    expect(fields.fileHints).toEqual([]);
+  });
+
+  it('absent hint ⇒ byte-identical fields to v0.1 (no sourceHint key)', () => {
+    const withoutElement = buildBriefFields(itemWith(), undefined, {});
+    const withElement = buildBriefFields(
+      itemWith({ element: { domPath: '#btn' } }),
+      undefined,
+      {},
+    );
+    expect('sourceHint' in withoutElement).toBe(false);
+    expect('sourceHint' in withElement).toBe(false);
+    expect(JSON.stringify(withElement)).toBe(JSON.stringify(withoutElement));
+  });
+
+  it('the guarded factory (not the worker) is the validation gate', () => {
+    // The worker passes the stored value through; a hostile stored value is
+    // dropped by createBriefFromTriagedFeedback, not silently kept.
+    const fields = buildBriefFields(
+      itemWith({
+        element: { domPath: '#btn', sourceHint: '../../.env:1' },
+      }),
+      undefined,
+      {},
+    );
+    expect(fields.sourceHint).toBe('../../.env:1');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const item: FeedbackItem = {
+        ...itemWith(),
+        triage: {
+          classification: 'patchable',
+          confidence: 0.95,
+          reasoning: 'seeded',
+          triagedAt: new Date().toISOString(),
+        },
+      };
+      const brief = createBriefFromTriagedFeedback(item, fields);
+      expect('sourceHint' in brief).toBe(false);
+    } finally {
+      warn.mockRestore();
+    }
   });
 });

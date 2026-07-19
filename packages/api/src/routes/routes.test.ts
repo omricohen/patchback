@@ -152,6 +152,53 @@ describe('POST /feedback schema enforcement', () => {
     }
   });
 
+  it('accepts a shape-valid element.sourceHint and stores it round-trip', async () => {
+    const { app, store } = makeApp();
+    const response = await app.inject({
+      method: 'POST',
+      url: '/feedback',
+      payload: {
+        message: 'The toolbar button label has a typo',
+        capture: {
+          element: {
+            domPath: '#export-btn',
+            tagName: 'button',
+            sourceHint: 'src/components/Toolbar.tsx:42',
+          },
+        },
+      },
+    });
+    expect(response.statusCode).toBe(201);
+    const id = response.json().id as string;
+    const stored = await store.getFeedback(id);
+    expect(stored?.capture?.element?.sourceHint).toBe(
+      'src/components/Toolbar.tsx:42',
+    );
+  });
+
+  it('rejects malformed element.sourceHint values at the schema (first line)', async () => {
+    const { app } = makeApp();
+    for (const sourceHint of [
+      'no-line-suffix.tsx',
+      'has spaces.tsx:1',
+      'newline\nsmuggle.tsx:1',
+      `${'a'.repeat(600)}.tsx:1`,
+      'back\\slash.tsx:1',
+      'unicode-Аpp.tsx:1',
+      'line-too-long.tsx:12345678',
+    ]) {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/feedback',
+        payload: {
+          message: 'hi',
+          capture: { element: { domPath: '#x', sourceHint } },
+        },
+      });
+      expect(response.statusCode, sourceHint).toBe(400);
+    }
+  });
+
   it('rejects missing/empty/oversized messages', async () => {
     const { app } = makeApp();
     for (const payload of [

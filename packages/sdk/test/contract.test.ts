@@ -105,6 +105,39 @@ describe('SDK ↔ API contract', () => {
     expect(viaKey.id).toBe(submitted.id);
   });
 
+  it('round-trips element.sourceHint through submit → store (real server)', async () => {
+    const world = await makeWorld([{ classification: 'patchable' }]);
+    const client = createPatchbackClient({ baseUrl: world.baseUrl });
+
+    const submitted = await client.submitFeedback({
+      message: 'The toolbar button label has a typo',
+      capture: {
+        element: {
+          domPath: '#export-btn',
+          tagName: 'button',
+          sourceHint: 'src/components/Toolbar.tsx:42',
+        },
+      },
+    });
+    await world.queue.onIdle();
+
+    const stored = await world.store.getFeedback(submitted.id);
+    expect(stored?.capture?.element?.sourceHint).toBe(
+      'src/components/Toolbar.tsx:42',
+    );
+    // And a hint-less submit stores a hint-less element (no key at all).
+    const plain = await client.submitFeedback({
+      message: 'Another typo report',
+      capture: { element: { domPath: '#other-btn' } },
+    });
+    await world.queue.onIdle();
+    const storedPlain = await world.store.getFeedback(plain.id);
+    expect(
+      'sourceHint' in
+        ((storedPlain?.capture?.element ?? {}) as Record<string, unknown>),
+    ).toBe(false);
+  });
+
   it('walks the happy path: submit → triage → startJob → status', async () => {
     const world = await makeWorld([
       { classification: 'patchable', confidence: 0.95 },

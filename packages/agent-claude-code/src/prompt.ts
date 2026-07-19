@@ -23,6 +23,21 @@ export function buildPrompt(
     '',
   ];
 
+  if (brief.sourceHint !== undefined) {
+    lines.push(
+      '## Reported element source location',
+      'The user picked a UI element carrying a build-time source annotation:',
+      `\`${brief.sourceHint}\` (file:line, relative to the repo root).`,
+      '- Treat this as the PRIMARY starting point: open this file at this line first.',
+      '- VERIFY before editing: confirm the code there actually renders the element the',
+      '  feedback describes. The annotation is a hint from the page, not a trusted fact.',
+      '- If the file does not exist, or the line does not correspond to the reported',
+      '  element, IGNORE the hint and locate the code by searching the repository.',
+      '  Never edit the hinted location on the strength of the hint alone.',
+      '',
+    );
+  }
+
   if (brief.fileHints.length > 0) {
     lines.push(
       '## Likely relevant files (hints, verify before editing)',

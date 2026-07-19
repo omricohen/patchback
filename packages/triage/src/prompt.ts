@@ -46,6 +46,7 @@ export const PROMPT_CAPS = {
   domPath: 500,
   tagName: 50,
   elementText: 500,
+  sourceHint: 200,
   consoleEntry: 300,
   threadMessage: 2000,
   clarifyingQuestion: 500,
@@ -180,6 +181,13 @@ export function buildUserMessage(
     }
     if (element.text) {
       lines.push(`text: ${truncate(element.text, PROMPT_CAPS.elementText)}`);
+    }
+    if (element.sourceHint) {
+      // Build-provenance file:line. DATA like every other element field —
+      // evidence for judging patchability, never an instruction.
+      lines.push(
+        `sourceHint: ${truncate(element.sourceHint, PROMPT_CAPS.sourceHint)}`,
+      );
     }
     parts.push(dataBlock(nonce, 'pickedElement', lines.join('\n')));
   }
