@@ -1,0 +1,93 @@
+{
+  "name": "@patchback/provenance",
+  "version": "0.0.1",
+  "description": "Build-time source provenance: stamp rendered elements with data-pb-source file:line annotations",
+  "keywords": [
+    "patchback",
+    "provenance",
+    "jsx",
+    "source-location",
+    "vite-plugin",
+    "babel-plugin"
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/omricohen/patchback/tree/main/packages/provenance#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/omricohen/patchback.git",
+    "directory": "packages/provenance"
+  },
+  "bugs": {
+    "url": "https://github.com/omricohen/patchback/issues"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./jsx-dev-runtime": {
+      "types": "./dist/jsx-dev-runtime.d.ts",
+      "default": "./dist/jsx-dev-runtime.js"
+    },
+    "./jsx-runtime": {
+      "types": "./dist/jsx-runtime.d.ts",
+      "default": "./dist/jsx-runtime.js"
+    },
+    "./vite": {
+      "types": "./dist/vite.d.ts",
+      "default": "./dist/vite.js"
+    },
+    "./next": {
+      "types": "./dist/next.d.ts",
+      "default": "./dist/next.js"
+    },
+    "./babel": {
+      "types": "./dist/babel.d.ts",
+      "default": "./dist/babel.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.typecheck.json"
+  },
+  "dependencies": {
+    "@babel/core": "^7.29.7",
+    "@patchback/types": "workspace:*"
+  },
+  "peerDependencies": {
+    "next": ">=14",
+    "react": "^18 || ^19",
+    "vite": ">=5"
+  },
+  "peerDependenciesMeta": {
+    "next": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "vite": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/babel__core": "^7.20.5",
+    "@types/react": "^19.2.17",
+    "react": "^19.2.7",
+    "vite": "^8.1.4"
+  }
+}
