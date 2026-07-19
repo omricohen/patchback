@@ -33,3 +33,20 @@ pnpm --filter nextjs-demo dev
 The widget loads from the local API via the same snippet `patchback dev`
 prints (`app/components/patchback-snippet.tsx`); the key is env-injected
 because it is minted per run.
+
+## Source provenance (dev)
+
+This example wires `@patchback/provenance` so `next dev` stamps every host
+element with `data-pb-source="<repo-relative-file>:<line>"` and a picked
+element carries a real `sourceHint` into the feedback payload:
+
+- `tsconfig.json` sets `"jsxImportSource": "@patchback/provenance"` — Next's
+  SWC reads it (the same mechanism Emotion uses; SWC stays enabled, and it
+  works under both webpack dev and `next dev --turbopack`).
+- `next.config.mjs` wraps the config with `withPatchbackProvenance(...)`,
+  which injects the discovered repo root (nearest `.git` ancestor) in the
+  dev phase only.
+
+Production builds stamp nothing: the prod JSX runtime carries no source
+info, so stripping is structural, not a flag. The smoke tests assert
+structure only and never pin line numbers, so edits here stay green.

@@ -84,6 +84,9 @@ importers:
 
   examples/nextjs-demo:
     dependencies:
+      '@patchback/provenance':
+        specifier: workspace:*
+        version: link:../../packages/provenance
       next:
         specifier: 15.5.19
         version: 15.5.19(@babel/core@7.29.7)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)

@@ -24,3 +24,27 @@ cp examples/vite-demo/.env.example examples/vite-demo/.env.local
 # 4. Start the app:
 pnpm --filter vite-demo dev                # http://localhost:5174
 ```
+
+## Source provenance without JSX (manual contract)
+
+This app has no JSX, so the `@patchback/provenance` build plugin has nothing
+to stamp. The attribute it emits is a public DOM contract, not a plugin
+detail — any app may stamp elements by hand:
+
+```html
+<button data-pb-source="examples/vite-demo/src/page.ts:12">Save</button>
+```
+
+Rules for a hand-written `data-pb-source` value:
+
+- `relative/path/from/REPO/root.ext:LINE` — forward slashes, 1-based line;
+- relative only (never `/abs`, `C:\`, or `~`), no `.`/`..` or dot-prefixed
+  segments, no `node_modules`;
+- extension must be a source file (`.ts`, `.tsx`, `.js`, `.vue`, …).
+
+Invalid values are ignored by the widget (validated client- and
+server-side), and the element picker falls back to the nearest annotated
+ancestor, so a single stamp on a container covers its children. This demo
+intentionally leaves its seeded flaw unstamped — keeping one hint-free
+example app is useful coverage — but you can add the attribute to
+`src/page.ts` markup if you want to see the hint flow end to end.
