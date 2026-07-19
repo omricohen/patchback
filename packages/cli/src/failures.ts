@@ -18,6 +18,27 @@ export function explainPatchFailure(
 ): FailureExplanation {
   const raw = error ?? 'unknown error';
 
+  const repairMatch =
+    /target repo checks still failed after \d+ automated repair attempt: (.+?)\./.exec(
+      raw,
+    );
+  if (repairMatch !== null) {
+    const failedList = repairMatch[1] ?? '';
+    const names = ['lint', 'typecheck', 'test'].filter((name) =>
+      new RegExp(`\\b${name}\\b`).test(failedList),
+    );
+    const which = names.length > 0 ? names.join(' and ') : 'checks';
+    return {
+      headline: `${capitalize(which)} still failed after an automated repair`,
+      advice:
+        'The agent made a change, its checks failed, and one automated repair ' +
+        'attempt did not fix them — so no PR was opened. The before- and ' +
+        'after-repair check output is below. Rephrase the feedback or route ' +
+        'it to a human.',
+      raw,
+    };
+  }
+
   const checksMatch = /target repo checks failed: (.+)/.exec(raw);
   if (checksMatch !== null) {
     const failedList = checksMatch[1] ?? '';

@@ -10,24 +10,61 @@
  * scenarios without changing spawn logic:
  *
  *   FAKE_CLAUDE_MODE            label-change | dotdir-artifacts | huge-diff |
- *                               no-op | garbage | cli-error | crash | hang
+ *                               no-op | garbage | cli-error | crash | hang |
+ *                               repair-fix | repair-fail | repair-exceed
  *                               (default label-change)
  *   FAKE_CLAUDE_TARGET_FILE     file to edit for label-change (cwd-relative)
  *   FAKE_CLAUDE_FROM / _TO      label text to replace / replacement
  *   FAKE_CLAUDE_PROMPT_CAPTURE  absolute path; the received prompt is written
  *                               here so tests can assert on it without
  *                               dirtying the work tree
+ *   FAKE_CLAUDE_PROMPT_DIR      absolute dir; the received prompt is written to
+ *                               `<dir>/prompt-<n>.txt` per invocation so tests
+ *                               can assert on the repair (2nd) prompt
+ *   FAKE_CLAUDE_COUNTER         absolute path to a counter file; each run
+ *                               increments the integer inside and the repair
+ *                               modes branch on 1st vs 2nd invocation
  *   FAKE_CLAUDE_SPAWN_CAPTURE   absolute path; argv + full env + whether the
  *                               CLAUDE_CONFIG_DIR exists are written here as
  *                               JSON so tests can pin spawn isolation
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 const prompt = readFileSync(0, 'utf8');
 const mode = process.env.FAKE_CLAUDE_MODE ?? 'label-change';
 
+/**
+ * Increment a persistent counter file (outside the work tree) so a mode can
+ * tell the first invocation from the repair invocation. Returns the 1-based
+ * run number; without a counter path configured, every run is "1".
+ */
+function invocationNumber() {
+  const counterPath = process.env.FAKE_CLAUDE_COUNTER;
+  if (!counterPath) return 1;
+  let previous;
+  try {
+    previous =
+      Number.parseInt(readFileSync(counterPath, 'utf8').trim(), 10) || 0;
+  } catch {
+    previous = 0;
+  }
+  const count = previous + 1;
+  writeFileSync(counterPath, String(count));
+  return count;
+}
+
+const run = invocationNumber();
+
 if (process.env.FAKE_CLAUDE_PROMPT_CAPTURE) {
   writeFileSync(process.env.FAKE_CLAUDE_PROMPT_CAPTURE, prompt);
+}
+if (process.env.FAKE_CLAUDE_PROMPT_DIR) {
+  mkdirSync(process.env.FAKE_CLAUDE_PROMPT_DIR, { recursive: true });
+  writeFileSync(
+    join(process.env.FAKE_CLAUDE_PROMPT_DIR, `prompt-${run}.txt`),
+    prompt,
+  );
 }
 if (process.env.FAKE_CLAUDE_SPAWN_CAPTURE) {
   writeFileSync(
@@ -114,6 +151,59 @@ switch (mode) {
   }
   case 'no-op': {
     printResult('Everything already looks correct; no changes needed.');
+    break;
+  }
+  // --- Bounded-repair scenarios ------------------------------------------
+  // All three break the button label on the first invocation (checks fail),
+  // then behave differently on the repair (2nd) invocation. They operate on
+  // the SAME working tree, so the cumulative diff carries across runs.
+  case 'repair-fix': {
+    // 1st: break the label (checks fail). Repair: set the correct label.
+    const file = process.env.FAKE_CLAUDE_TARGET_FILE ?? 'src/button.js';
+    const from = process.env.FAKE_CLAUDE_FROM ?? 'Save changes';
+    const to = process.env.FAKE_CLAUDE_TO ?? 'Submit changes';
+    const content = readFileSync(file, 'utf8');
+    if (run === 1) {
+      writeFileSync(file, content.replace(`label: '${from}'`, "label: ''"));
+      printResult(`Set the label to empty in ${file}.`);
+    } else {
+      writeFileSync(file, content.replace("label: ''", `label: '${to}'`));
+      printResult(`Repaired the label to ${JSON.stringify(to)} in ${file}.`);
+    }
+    break;
+  }
+  case 'repair-fail': {
+    // 1st: break the label. Repair: still leaves it broken (append a comment
+    // so the repair genuinely edits the tree, but the label stays empty).
+    const file = process.env.FAKE_CLAUDE_TARGET_FILE ?? 'src/button.js';
+    const from = process.env.FAKE_CLAUDE_FROM ?? 'Save changes';
+    const content = readFileSync(file, 'utf8');
+    if (run === 1) {
+      writeFileSync(file, content.replace(`label: '${from}'`, "label: ''"));
+      printResult(`Set the label to empty in ${file}.`);
+    } else {
+      writeFileSync(file, content + '// repair attempt (still broken)\n');
+      printResult(`Tweaked ${file}, but the label is still empty.`);
+    }
+    break;
+  }
+  case 'repair-exceed': {
+    // 1st: a small failing change. Repair: adds a huge file so the CUMULATIVE
+    // diff blows the ceiling — the adapter must fail on the repair execution.
+    const file = process.env.FAKE_CLAUDE_TARGET_FILE ?? 'src/button.js';
+    const from = process.env.FAKE_CLAUDE_FROM ?? 'Save changes';
+    if (run === 1) {
+      const content = readFileSync(file, 'utf8');
+      writeFileSync(file, content.replace(`label: '${from}'`, "label: ''"));
+      printResult(`Set the label to empty in ${file}.`);
+    } else {
+      const lines = Array.from(
+        { length: 400 },
+        (_, i) => `const line${i} = ${i};`,
+      );
+      writeFileSync('generated-rewrite.js', lines.join('\n') + '\n');
+      printResult('Rewrote a module during repair (400 lines).');
+    }
     break;
   }
   case 'garbage': {

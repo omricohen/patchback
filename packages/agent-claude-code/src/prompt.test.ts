@@ -47,6 +47,44 @@ describe('buildPrompt', () => {
   });
 });
 
+describe('buildPrompt — repair section', () => {
+  const repair = {
+    attempt: 1,
+    failingChecks: [
+      {
+        name: 'test' as const,
+        command: 'npm run test',
+        outputTail: 'AssertionError: label is empty',
+      },
+    ],
+  };
+
+  it('frames the repair as fixing the ALREADY-APPLIED prior change', () => {
+    const prompt = buildPrompt(labelChangeBrief(), conventions, 300, repair);
+    expect(prompt).toContain(
+      '## Your previous change failed the repo checks — fix it',
+    );
+    expect(prompt).toMatch(/ALREADY APPLIED/);
+    expect(prompt).toMatch(/Do NOT revert them and do NOT start over/);
+    // The ceiling is described as cumulative across original + repair.
+    expect(prompt).toMatch(/original change AND this fix combined/);
+  });
+
+  it('embeds the failing check output as delimited diagnostic DATA', () => {
+    const prompt = buildPrompt(labelChangeBrief(), conventions, 300, repair);
+    expect(prompt).toContain('### Failing check: test (`npm run test`)');
+    expect(prompt).toContain('AssertionError: label is empty');
+    // Fenced, and framed as data/output rather than instructions to obey.
+    expect(prompt).toContain('```text');
+    expect(prompt).toMatch(/check-runner OUTPUT \(diagnostic data/);
+  });
+
+  it('absent repair ⇒ no repair section (purely additive)', () => {
+    const prompt = buildPrompt(labelChangeBrief(), conventions, 300);
+    expect(prompt).not.toContain('failed the repo checks');
+  });
+});
+
 describe('buildPrompt — sourceHint section', () => {
   it('renders the hint ABOVE fileHints as primary-but-verify-first', () => {
     const prompt = buildPrompt(

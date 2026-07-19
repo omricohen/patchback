@@ -27,6 +27,22 @@ describe('explainPatchFailure — readable failure headlines', () => {
     );
   });
 
+  it('checks still failed after a bounded repair attempt', () => {
+    const explanation = explainPatchFailure(
+      'target repo checks still failed after 1 automated repair attempt: ' +
+        'test (npm run test). No PR was opened — route this feedback to a ' +
+        'human.\n\nFailing checks BEFORE repair:\n### test — npm run test\n' +
+        'boom\n\nFailing checks AFTER repair:\n### test — npm run test\nboom2',
+    );
+    expect(explanation.headline).toBe(
+      'Test still failed after an automated repair',
+    );
+    expect(explanation.advice).toContain('one automated repair attempt');
+    // Both check outputs stay in the raw detail.
+    expect(explanation.raw).toContain('BEFORE repair');
+    expect(explanation.raw).toContain('AFTER repair');
+  });
+
   it('agent gave up: no changes', () => {
     const explanation = explainPatchFailure(
       'The agent finished without changing any files. Nothing to turn into a PR — the feedback may need clarification or a human.',

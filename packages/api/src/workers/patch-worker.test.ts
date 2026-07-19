@@ -81,6 +81,34 @@ describe('patch-worker success-path CAS', () => {
     expect(after?.state).toBe('pr.opened');
     expect(after?.prNumber).toBe(501);
     expect(logged).toHaveLength(0);
+    // No repair happened → the branch note carries no repair clause.
+    const generatedNote = after?.history.find(
+      (entry) => entry.to === 'patch.generated',
+    )?.note;
+    expect(generatedNote).not.toContain('repair attempt');
+  });
+
+  it('records the repair attempt count in the job history note', async () => {
+    const store = new MemoryStore();
+    const { job } = await seedQueuedJob(store);
+    const config = makeConfig(store, {});
+    const repairedPipeline = createFakePipeline({
+      ok: true,
+      branch: 'patchback/job-x',
+      prNumber: 909,
+      prUrl: 'https://github.com/acme/demo/pull/909',
+      repairAttempts: 1,
+    });
+    await runPatchTask(config, repairedPipeline, {
+      type: 'patch',
+      jobId: job.id,
+    });
+    const after = await store.getJob(job.id);
+    expect(after?.state).toBe('pr.opened');
+    const generatedNote = after?.history.find(
+      (entry) => entry.to === 'patch.generated',
+    )?.note;
+    expect(generatedNote).toContain('checks failed; ran 1 repair attempt');
   });
 
   it('logs loudly when the success CAS is lost instead of dropping PR metadata silently', async () => {
