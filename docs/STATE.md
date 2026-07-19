@@ -1,8 +1,44 @@
 # STATE — where we left off
 
-_Last updated: 2026-07-19 (v0.2 Phase 1 session)_
+_Last updated: 2026-07-19 (v0.2 Phase 2 session)_
 
 ## Current phase
+
+**v0.2 Phase 2 — Bounded repair iteration: DONE** on branch
+`v2-2-repair-loop` (branched from main; NOT merged, NOT pushed — Omri's
+call). Phase 1 (`v2-1-provenance`) is still unmerged too.
+
+### What's done (Phase 2)
+
+- **agent-core `executeWithRepair`** (new `execute-with-repair.ts`) — the
+  vendor-neutral loop: `execute()` → run checks → if they fail and repair is
+  enabled, set `AgentContext.repair` (structured `RepairContext` =
+  which-check/command/output-tail) and re-invoke the adapter ONCE, then
+  re-check. `MAX_REPAIR_ATTEMPTS = 1` (fixed constant, not a knob).
+  `patch.failed` only after the repair also fails, error keeps BOTH check
+  outputs. Returns `repairAttempts` (0 or 1).
+- **Cumulative ceiling** comes for free: the repair runs on the same scratch
+  tree with the prior diff applied, so the adapter's `diffNumstat`-vs-base
+  already measures original+repair. Ceiling failure message now notes when it
+  happened during repair (`agent-claude-code/src/adapter.ts`).
+- **Repair prompt section** (`agent-claude-code/src/prompt.ts`) — fenced,
+  clearly-delimited "your prior change is ALREADY APPLIED, amend it" block
+  with the failing-check OUTPUT as diagnostic DATA (tool-generated, not user
+  text — trust boundary intact).
+- **Wiring** — `DefaultPipelineOptions.repair` + `ApiConfig.repair` (default
+  ON, disableable); pipeline is a thin caller of `executeWithRepair` then the
+  GitHub commit/PR half; patch-worker records the attempt count in the
+  `patch.generated` history note. CLI/API keep repair on by default.
+- **Tests** — 4 fake-CLI acceptance scenarios end-to-end
+  (`repair.pipeline.test.ts`: fail-then-fix, fail-then-fail w/ both outputs,
+  repair-exceeds-ceiling, disabled=one-invocation), agent-core unit tests,
+  api pipeline + patch-worker coverage, prompt + failures tests. Fake CLI got
+  an invocation-counter file + per-run prompt capture.
+- **Gate** — `pnpm lint && typecheck && test && build` + `format:check` all
+  green. Live real-binary e2e reached the real CLI but hit "Credit balance is
+  too low" (account funding, not a regression) — see OPEN_ISSUES.
+
+## Previous phase
 
 **v0.2 Phase 1 — Build-time source provenance: DONE** on branch
 `v2-1-provenance` (not merged, not pushed — Omri's call). Plan:
@@ -54,9 +90,11 @@ in full, including the @babel/core dependency).
 
 ## Next concrete step
 
-v0.2 Phase 2 per the v0.2 plan (Omri to point at the phase-2 artifact), or
-merge `v2-1-provenance` after review. Release-note reminder: older API
-400s a newer widget that sends sourceHint (see OPEN_ISSUES 2026-07-19).
+v0.2 Phase 3 per the v0.2 plan (Omri to point at the next phase artifact), or
+review + merge `v2-1-provenance` then `v2-2-repair-loop`. When credit is
+restored, re-run the live e2e (real Claude CLI) to confirm the repair path
+end-to-end. Release-note reminder: older API 400s a newer widget that sends
+sourceHint (see OPEN_ISSUES 2026-07-19).
 
 ---
 
