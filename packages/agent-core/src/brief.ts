@@ -1,5 +1,7 @@
 import {
   canInitiatePatchJob,
+  formatSourceHint,
+  parseSourceHint,
   type FeedbackItem,
   type TriageClassification,
   type TrustTier,
@@ -41,6 +43,14 @@ export interface TaskBrief {
   fileHints: string[];
   /** Observable criteria a reviewer will use to judge the change done. */
   acceptanceCriteria: string[];
+  /**
+   * Build-provenance location (`relative/file.tsx:line`) of the UI element
+   * the feedback was reported against. Page-controlled data at origin: the
+   * factory re-validates with `parseSourceHint` and DROPS invalid values,
+   * so a brief that carries this field carries a shape-clean relative path.
+   * Still a hint to VERIFY, never an instruction — prompts must say so.
+   */
+  sourceHint?: string;
   /** The FeedbackItem this brief was derived from, for the audit trail. */
   feedbackId?: string;
 }
@@ -123,6 +133,12 @@ export interface GuardedTaskBrief extends TaskBrief {
  *
  * Stamps `feedbackId` and `sourceTier` from the item; callers supply the
  * remaining brief fields.
+ *
+ * `sourceHint` is additionally re-validated here — the factory is the
+ * AUTHORITATIVE gate for it (guarded-brand design: no caller can smuggle an
+ * unvalidated hint past this function). Invalid hints are dropped, with a
+ * warning, and the brief proceeds hint-less: a hostile build stamp must
+ * never DoS the patch pipeline.
  */
 export function createBriefFromTriagedFeedback(
   item: FeedbackItem,
@@ -132,8 +148,22 @@ export function createBriefFromTriagedFeedback(
   if (item.triage?.classification !== 'patchable') {
     throw new BriefNotPatchableError(item.triage?.classification);
   }
+  const { sourceHint: rawSourceHint, ...rest } = fields;
+  let sourceHint: string | undefined;
+  if (rawSourceHint !== undefined) {
+    const parsed = parseSourceHint(rawSourceHint);
+    if (parsed !== undefined) {
+      sourceHint = formatSourceHint(parsed);
+    } else {
+      console.warn(
+        'patchback: dropped invalid sourceHint from brief for feedback ' +
+          `${item.id} (page-controlled value failed validation)`,
+      );
+    }
+  }
   const brief: Omit<GuardedTaskBrief, typeof briefFromTriagedFeedback> = {
-    ...fields,
+    ...rest,
+    ...(sourceHint !== undefined ? { sourceHint } : {}),
     feedbackId: item.id,
     sourceTier: item.trustTier,
   };

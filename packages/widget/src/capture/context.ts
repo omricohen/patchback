@@ -3,6 +3,7 @@ import type {
   ConsoleEntry,
   PickedElement,
 } from '@patchback/types';
+import { formatSourceHint, parseSourceHint } from '@patchback/types';
 
 import type { ResolvedCaptureConfig } from '../config.js';
 import type { MaskingEngine } from '../masking/engine.js';
@@ -99,6 +100,16 @@ export function buildCaptureContext(
       // cheap — run it again here so the choke point does not rely on the
       // caller having done it.
       element.text = engine.scrub(preview.element.text).slice(0, 2000);
+    }
+    if (preview.element.sourceHint !== undefined) {
+      // Metadata, not content: never scrubbed (scrub could mangle a path),
+      // but re-validated at the choke point — the canonical parse either
+      // yields a clean relative `file:line` or the field is dropped. An
+      // invalid build stamp must never block a submit.
+      const hint = parseSourceHint(preview.element.sourceHint);
+      if (hint !== undefined) {
+        element.sourceHint = formatSourceHint(hint);
+      }
     }
     context.element = element;
   }

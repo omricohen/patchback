@@ -1,0 +1,117 @@
+/**
+ * Browser-safe core: turn a JSX transform's `source` info into a
+ * `data-pb-source` stamp value — or nothing.
+ *
+ * Path privacy is FAIL CLOSED: absolute paths (`/Users/…`, `C:\…`) leak
+ * usernames and machine layout and must never appear in the DOM. A stamp is
+ * emitted only when the fileName can be cleanly relativized against the
+ * injected repo root (or is already root-relative, as Turbopack emits) AND
+ * the result passes the shared `parseSourceHint` validator. Unknown root,
+ * outside-root file, `node_modules`, or any residual absolute form ⇒ no
+ * attribute.
+ */
+import { isValidSourceHint } from '@patchback/types';
+
+/** Turbopack serves first-party modules as `[project]/<root-relative>`. */
+const TURBOPACK_PREFIX = '[project]/';
+
+/** Global the build integration uses to inject the repo root in dev. */
+export const PROVENANCE_ROOT_GLOBAL = '__PATCHBACK_PROVENANCE_ROOT__';
+
+/**
+ * Set (or clear) the repo root at runtime. The Vite plugin injects an inline
+ * script that does exactly this; manual integrations and tests may call it
+ * directly.
+ */
+export function setProvenanceRoot(root: string | undefined): void {
+  (globalThis as Record<string, unknown>)[PROVENANCE_ROOT_GLOBAL] = root;
+}
+
+function injectedRoot(): string | undefined {
+  const fromGlobal = (globalThis as Record<string, unknown>)[
+    PROVENANCE_ROOT_GLOBAL
+  ];
+  if (typeof fromGlobal === 'string' && fromGlobal !== '') {
+    return fromGlobal;
+  }
+  try {
+    // Inlined at build time by the Next helper (nextConfig.env) in dev.
+    const fromEnv = process.env.PATCHBACK_PROVENANCE_ROOT;
+    if (typeof fromEnv === 'string' && fromEnv !== '') {
+      return fromEnv;
+    }
+  } catch {
+    // No `process` in this environment.
+  }
+  return undefined;
+}
+
+function isAbsolutePath(file: string): boolean {
+  return file.startsWith('/') || /^[A-Za-z]:\//.test(file);
+}
+
+/** Memoized per (root, fileName): stamping runs once per JSX element. */
+const fileCache = new Map<string, string | undefined>();
+
+/**
+ * Repo-root-relative, validated source file for a transform-emitted
+ * fileName — or `undefined` (fail closed).
+ */
+export function relativeSourceFile(fileName: unknown): string | undefined {
+  if (typeof fileName !== 'string' || fileName === '') {
+    return undefined;
+  }
+  const root = injectedRoot();
+  const key = `${root ?? ''}\u0000${fileName}`;
+  if (fileCache.has(key)) {
+    return fileCache.get(key);
+  }
+  const relative = computeRelative(fileName, root);
+  fileCache.set(key, relative);
+  return relative;
+}
+
+function computeRelative(
+  fileName: string,
+  root: string | undefined,
+): string | undefined {
+  let file = fileName.replace(/\\/g, '/');
+  if (file.startsWith(TURBOPACK_PREFIX)) {
+    file = file.slice(TURBOPACK_PREFIX.length);
+  } else if (isAbsolutePath(file)) {
+    if (root === undefined) {
+      return undefined;
+    }
+    const normalizedRoot = root.replace(/\\/g, '/').replace(/\/+$/, '');
+    if (normalizedRoot === '' || !file.startsWith(`${normalizedRoot}/`)) {
+      return undefined;
+    }
+    file = file.slice(normalizedRoot.length + 1);
+  }
+  // Shared validator is the final gate: rejects any residual absolute form,
+  // traversal, dot-segments, node_modules, bad charset/extension.
+  return isValidSourceHint(`${file}:1`) ? file : undefined;
+}
+
+/**
+ * The stamp value for one rendered element: `relative/file.tsx:line`, or
+ * `undefined` when anything about the source info is unusable (fail closed).
+ */
+export function computeStamp(
+  fileName: unknown,
+  lineNumber: unknown,
+): string | undefined {
+  if (
+    typeof lineNumber !== 'number' ||
+    !Number.isInteger(lineNumber) ||
+    lineNumber < 1 ||
+    lineNumber > 9_999_999
+  ) {
+    return undefined;
+  }
+  const file = relativeSourceFile(fileName);
+  if (file === undefined) {
+    return undefined;
+  }
+  return `${file}:${lineNumber}`;
+}

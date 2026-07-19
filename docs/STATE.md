@@ -1,6 +1,66 @@
 # STATE — where we left off
 
-_Last updated: 2026-07-15 (orchestration run closed)_
+_Last updated: 2026-07-19 (v0.2 Phase 1 session)_
+
+## Current phase
+
+**v0.2 Phase 1 — Build-time source provenance: DONE** on branch
+`v2-1-provenance` (not merged, not pushed — Omri's call). Plan:
+`.a5c/runs/01KXXPDF1Y7TMPE4J22S3GNN6K/artifacts/phase-1-plan.md` (approved
+in full, including the @babel/core dependency).
+
+## What's done (this session)
+
+- **Step-0 spike (mechanism gate): PASSED on all four environments** —
+  Vite 8 dev, Next 15.5 dev (SWC), Next dev --turbopack all emit jsxDEV
+  `source` (Turbopack with `[project]/`-relative fileNames); Vite/Next prod
+  builds emit no source info (structural stripping confirmed). No fallback
+  pivot needed. Full matrix in .claude/DECISIONS.md (2026-07-19).
+- **`packages/types`** — `PROVENANCE_ATTRIBUTE`, `PickedElement.sourceHint`
+  (additive), shared `parseSourceHint`/`isValidSourceHint`/
+  `formatSourceHint` validator + exhaustive accept/reject table tests.
+- **New `packages/provenance` (@patchback/provenance)** — browser-safe core
+  (fail-closed repo-relative stamping, `[project]/` handling, memoized),
+  `jsx-dev-runtime`/`jsx-runtime` entries (dev stamping / pure prod
+  passthrough), Vite plugin (oxc vs esbuild version-aware import source,
+  dev root injection via inline script, `production: 'annotate'` opt-in),
+  `withPatchbackProvenance` Next helper (dev-phase-only env root), static
+  babel plugin (`elements: 'all' | 'interactive'`). 38 unit tests.
+  Dep: @babel/core ^7.29.7 (v7 line kept; Babel 8 too fresh — see log).
+- **Widget** — picker walks self→flat-tree ancestors for the first VALID
+  `data-pb-source`; choke point re-validates and canonicalizes; preview
+  shows a `source: file:line` row; zero-config snapshot untouched.
+- **API/SDK** — `CAPTURE_SCHEMA.element.sourceHint` (maxLength 512 +
+  conservative pattern); patch-worker threads it into brief fields; SDK
+  contract test round-trips it against the real server.
+- **agent-core/agent-claude-code** — `TaskBrief.sourceHint`; the guarded
+  factory is the authoritative validator (drops invalid, warns, never
+  throws); prompt renders a PRIMARY-but-VERIFY-FIRST section above
+  fileHints; absent-hint output byte-identical (test-pinned).
+- **Triage** — hint serialized as DATA in the element block (200-char cap);
+  hostile-hint injection eval fixture added.
+- **Playground + examples** — /react.html annotated (typo button +
+  dangerouslySetInnerHTML ancestor-fallback child); vanilla / stays the
+  negative control; browser suite (PATCHBACK_BROWSER_TESTS=1, 6/6 green)
+  proves real file:line with line numbers computed from source at runtime;
+  nextjs-demo wired (tsconfig jsxImportSource + withPatchbackProvenance),
+  verified live in SWC dev AND Turbopack dev (repo-relative stamps, zero
+  absolute paths) and in `next build` (zero stamps); vite-demo README
+  documents the manual data-pb-source contract.
+- **Gates** — pnpm lint + typecheck + test + build + format:check green;
+  publish dry-run incl. the new package; docs (READMEs, SPEC additive
+  rows), DECISIONS (mechanism+spike, babel-7 pin, validation policy),
+  OPEN_ISSUES (version-skew release note, Vite-major sensitivity).
+
+## Next concrete step
+
+v0.2 Phase 2 per the v0.2 plan (Omri to point at the phase-2 artifact), or
+merge `v2-1-provenance` after review. Release-note reminder: older API
+400s a newer widget that sends sourceHint (see OPEN_ISSUES 2026-07-19).
+
+---
+
+# Previous state (v0.1 orchestration run closed, 2026-07-15)
 
 ## Build run: COMPLETE
 
@@ -30,8 +90,6 @@ pixel-verified across 3 adversarial rounds; agent-spawn isolation fixed.
 ---
 
 # Previous state (phase 10 session)
-
-
 
 _Last updated: 2026-07-15_
 

@@ -94,6 +94,17 @@ Uncertain feedback never reaches the agent: the triage step classifies it
 `needs_human` instead. Submissions without an API key are `outsider` tier —
 stored as data, never turned into instructions.
 
+### Optional: source provenance (better localization)
+
+Add [`@patchback/provenance`](packages/provenance) to your app's build and
+dev renders stamp every element with `data-pb-source="src/file.tsx:42"`
+(repo-root-relative). A picked element then carries that `file:line` into
+the feedback payload — shown in the "What will be sent" preview — and the
+agent starts at the exact source location instead of searching. Vite,
+Next.js (SWC and Turbopack), and a plain babel plugin are supported;
+production builds stamp nothing by default. Non-JSX apps can write the
+attribute by hand — it is a documented public contract.
+
 ## Example apps
 
 - [`examples/nextjs-demo`](examples/nextjs-demo) — a fake internal ops

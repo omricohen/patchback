@@ -116,7 +116,9 @@ export function labelChangeFeedback(): FeedbackItem {
  * Built through the guarded factory — the only way to produce a brief an
  * adapter will accept.
  */
-export function labelChangeBrief(): GuardedTaskBrief {
+export function labelChangeBrief(sourceHint?: string): GuardedTaskBrief {
+  // Always built through the guarded factory — including the optional
+  // sourceHint, so fixtures exercise the same validation gate as production.
   return createBriefFromTriagedFeedback(labelChangeFeedback(), {
     title: `Change button label "${OLD_LABEL}" to "${NEW_LABEL}"`,
     description:
@@ -128,5 +130,6 @@ export function labelChangeBrief(): GuardedTaskBrief {
       `The button label is "${NEW_LABEL}".`,
       'No other behavior changes.',
     ],
+    ...(sourceHint !== undefined ? { sourceHint } : {}),
   });
 }

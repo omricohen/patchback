@@ -66,6 +66,16 @@ export const CAPTURE_SCHEMA = {
         domPath: { type: 'string', maxLength: 2000 },
         tagName: { type: 'string', maxLength: 100 },
         text: { type: 'string', maxLength: 2000 },
+        // Build-provenance file:line. First-line shape gate only (charset +
+        // line suffix); deep semantics (traversal, dot-segments,
+        // node_modules, extension allowlist) live in parseSourceHint, which
+        // the brief factory re-runs authoritatively before any agent sees
+        // the value.
+        sourceHint: {
+          type: 'string',
+          maxLength: 512,
+          pattern: '^[A-Za-z0-9_./-]+:[0-9]{1,7}(:[0-9]{1,7})?$',
+        },
       },
     },
     screenshot: {

@@ -107,7 +107,10 @@ export async function runPatchTask(
  * Brief fields are built DETERMINISTICALLY — no extra model call. Title from
  * the message; description from message + clarifying-thread context;
  * constraints from config defaults; fileHints empty in v0.1 (capture DOM
- * paths do not map to files yet); acceptance criteria generic.
+ * paths do not map to files yet); sourceHint threaded through verbatim from
+ * the capture when present (the guarded brief factory performs the
+ * authoritative validation and drops anything invalid); acceptance criteria
+ * generic.
  */
 export function buildBriefFields(
   item: FeedbackItem,
@@ -130,6 +133,7 @@ export function buildBriefFields(
     descriptionParts.push(item.message);
   }
 
+  const sourceHint = item.capture?.element?.sourceHint;
   return {
     title: firstLine(item.message),
     description: descriptionParts.join('\n\n'),
@@ -139,5 +143,6 @@ export function buildBriefFields(
       'The change described in the feedback is implemented.',
       "The target repo's own lint/typecheck/test checks still pass.",
     ],
+    ...(sourceHint !== undefined ? { sourceHint } : {}),
   };
 }

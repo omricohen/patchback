@@ -151,6 +151,13 @@ function renderPreview(state: PanelState, actions: PanelActions): HTMLElement {
         h('span', { className: 'pb-field' }, ['Element:']),
         h('span', {}, [
           `<${draft.element.tagName ?? '?'}> ${truncate(draft.element.text ?? draft.element.domPath, 80)}`,
+          ...(draft.element.sourceHint !== undefined
+            ? [
+                h('div', { className: 'pb-muted', 'data-preview-source': '' }, [
+                  `source: ${truncate(draft.element.sourceHint, 80)}`,
+                ]),
+              ]
+            : []),
         ]),
         remove,
       ]),

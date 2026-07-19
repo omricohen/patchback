@@ -5,6 +5,7 @@
     "module": "esnext",
     "moduleResolution": "bundler",
     "jsx": "preserve",
+    "jsxImportSource": "@patchback/provenance",
     "noEmit": true,
     "allowJs": true,
     "resolveJsonModule": true,
