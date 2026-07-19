@@ -157,9 +157,7 @@ describe('buildCaptureContext — capture defaults (rule 4)', () => {
         ENV,
       );
       expect(context.element).toBeDefined();
-      expect('sourceHint' in (context.element as Record<string, unknown>)).toBe(
-        false,
-      );
+      expect(Object.keys(context.element ?? {})).not.toContain('sourceHint');
     }
 
     // No hint in the preview → EXACT element shape, no sourceHint key.

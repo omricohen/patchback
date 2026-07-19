@@ -2,6 +2,8 @@
 
 ## Open
 
+- **[2026-07-19] sourceHint version skew: an older server 400s a newer widget** — `CAPTURE_SCHEMA` uses `additionalProperties: false`, so a v0.2 widget submitting `capture.element.sourceHint` against a v0.1 API gets a 400 on the whole submission (not a dropped field). Accepted for self-hosted deployments where widget and API ship together; MUST be called out in the v0.2 release notes ("upgrade the API before or with the widget"). Lives in `packages/api/src/routes/shared.ts`.
+- **[2026-07-19] Vite plugin jsxImportSource option is Vite-version-sensitive** — `@patchback/provenance/vite` sets `oxc.jsx.importSource` on Vite ≥8 and `esbuild.jsxImportSource` below (Vite 8 ignores esbuild options with a deprecation warning when oxc options exist). Detection is by `version` export major. Re-verify on Vite majors; with `@vitejs/plugin-react` the option is passed to `react()` directly and this seam is bypassed. Lives in `packages/provenance/src/vite.ts`.
 - **[2026-07-10] docs/SPEC.md is provisional** — the real spec was drafted in a Claude chat session and never saved into the repo. Current file is a consolidation of CLAUDE.md + BUILD_PLAN.md only. Omri: paste the original spec over it and remove the banner.
 - **[2026-07-10] No GitHub remote yet** — repo is local-only. Needed before Phase 3 (integration tests against a scratch repo) and for the phase-branch → PR workflow.
 
