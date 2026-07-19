@@ -7,6 +7,7 @@
  */
 export * from './trust.js';
 export * from './capture.js';
+export * from './provenance.js';
 export * from './triage.js';
 export * from './feedback.js';
 export * from './job.js';

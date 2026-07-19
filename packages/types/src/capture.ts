@@ -23,6 +23,14 @@ export interface PickedElement {
   tagName?: string;
   /** Visible text content, post-masking, truncated by the widget. */
   text?: string;
+  /**
+   * Build-provenance source location (`relative/file.tsx:line`) read from the
+   * picked element's `data-pb-source` attribute (or nearest annotated
+   * ancestor). App/DOM-controlled data — always validate with
+   * `parseSourceHint` before trusting; the brief factory is the
+   * authoritative gate.
+   */
+  sourceHint?: string;
 }
 
 export interface Viewport {
