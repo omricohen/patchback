@@ -1,8 +1,39 @@
 import type { PickedElement } from '@patchback/types';
+import {
+  PROVENANCE_ATTRIBUTE,
+  formatSourceHint,
+  parseSourceHint,
+} from '@patchback/types';
 
 import { buildDomPath } from '../dom/path.js';
 import type { MaskingEngine } from '../masking/engine.js';
+import { flatTreeParent } from '../masking/policy.js';
 import { h } from './dom.js';
+
+/**
+ * Build-provenance hint for a picked element: the first VALID
+ * `data-pb-source` value on the element or its flat-tree ancestors (same
+ * traversal semantics as the masking engine's nearest-marker walk, so a
+ * stamp on a shadow host covers its shadow content). Invalid values are
+ * skipped — the attribute is page-controlled data, and `parseSourceHint`
+ * is the only judge of shape. No annotation anywhere ⇒ `undefined`.
+ */
+export function sourceHintFor(el: Element): string | undefined {
+  for (
+    let current: Element | null = el;
+    current !== null;
+    current = flatTreeParent(current)
+  ) {
+    const raw = current.getAttribute(PROVENANCE_ATTRIBUTE);
+    if (raw !== null) {
+      const parsed = parseSourceHint(raw);
+      if (parsed !== undefined) {
+        return formatSourceHint(parsed);
+      }
+    }
+  }
+  return undefined;
+}
 
 /**
  * Element picker — per-use GESTURE consent: nothing is captured until the
@@ -111,10 +142,12 @@ export function pickElementInteractive(
       }
       const el = candidate;
       const text = engine.maskedTextOf(el).slice(0, 2000);
+      const sourceHint = sourceHintFor(el);
       const picked: PickedElement = {
         domPath: buildDomPath(el),
         tagName: el.tagName.toLowerCase(),
         ...(text !== '' ? { text } : {}),
+        ...(sourceHint !== undefined ? { sourceHint } : {}),
       };
       finish(picked);
     }
