@@ -102,6 +102,7 @@ describe('patch-worker success-path CAS', () => {
           branch: `patchback/job-${running.id}`,
           prNumber: 777,
           prUrl: 'https://github.com/acme/demo/pull/777',
+          repairAttempts: 0,
         };
       },
     };

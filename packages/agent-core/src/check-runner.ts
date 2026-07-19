@@ -68,6 +68,36 @@ export interface ChecksReport {
   allPassed: boolean;
 }
 
+/**
+ * One failing check reduced to the fields an agent needs to fix it: which
+ * check, the exact command, and the tail of its output. This is the structured
+ * feedback fed into a bounded repair invocation (see `executeWithRepair`).
+ *
+ * Trust note: every field here is tool-generated (the check-runner ran the
+ * repo's own scripts) — it is never submitter-controlled content, so routing
+ * it back to the agent does not reopen the outsider/brief trust boundary.
+ */
+export interface FailingCheckFeedback {
+  name: CheckName;
+  /** Full command that was run, e.g. `pnpm run test`. */
+  command: string;
+  /** Tail of the failing check's combined stdout+stderr. */
+  outputTail: string;
+}
+
+/** The failing checks from a report, as structured repair feedback. */
+export function collectFailingChecks(
+  report: ChecksReport,
+): FailingCheckFeedback[] {
+  return report.ran
+    .filter((check) => !check.passed)
+    .map((check) => ({
+      name: check.name,
+      command: check.command,
+      outputTail: check.outputTail,
+    }));
+}
+
 export interface RunChecksOptions {
   /** Package manager to run scripts with. Default npm. */
   packageManager?: PackageManager;

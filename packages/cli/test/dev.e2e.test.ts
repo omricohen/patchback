@@ -175,6 +175,7 @@ describe('patchback dev end-to-end (fakes)', () => {
         pipeline: createFakePipeline({
           ok: false,
           error: 'target repo checks failed: lint (npm run lint)',
+          repairAttempts: 0,
         }),
       },
     });
@@ -206,6 +207,7 @@ describe('patchback dev end-to-end (fakes)', () => {
           error:
             'The agent finished without changing any files. Nothing to turn ' +
             'into a PR — the feedback may need clarification or a human.',
+          repairAttempts: 0,
         }),
       },
     });

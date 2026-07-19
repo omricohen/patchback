@@ -82,7 +82,9 @@ function baseConfig(overrides: Partial<ApiConfig> = {}): ApiConfig {
         url: '',
       }),
     },
-    pipeline: { run: async () => ({ ok: false, error: 'unused' }) },
+    pipeline: {
+      run: async () => ({ ok: false, error: 'unused', repairAttempts: 0 }),
+    },
     ...overrides,
   };
 }

@@ -1,5 +1,28 @@
 import type { GuardedTaskBrief } from './brief.js';
+import type { FailingCheckFeedback } from './check-runner.js';
 import type { RepoConventions } from './repo-reader.js';
+
+/**
+ * Present on the context ONLY during a bounded repair invocation: the prior
+ * `execute()` already applied a diff to `workDir`, but the repo's checks
+ * failed. An adapter that sees this must AMEND the existing change (which is
+ * still in the working tree) so the checks pass — not start over. The diff
+ * ceiling is measured cumulatively (original change + repair) from the base
+ * commit, so a repair cannot smuggle in a large rewrite.
+ *
+ * Everything in {@link FailingCheckFeedback} is tool-generated check output,
+ * never submitter-controlled text — the trust boundary is unchanged.
+ */
+export interface RepairContext {
+  /**
+   * 1-based repair attempt index. v0.2 caps repair at exactly one attempt
+   * (see `MAX_REPAIR_ATTEMPTS`), so this is always 1; the field exists so the
+   * cap can be lifted later without a shape change.
+   */
+  attempt: number;
+  /** Structured feedback for the checks that failed on the prior execution. */
+  failingChecks: FailingCheckFeedback[];
+}
 
 /**
  * Everything an adapter needs to do its work. Constructed by the orchestrator
@@ -27,6 +50,13 @@ export interface AgentContext {
    * `readRepoConventions`); orchestrators may pre-populate it.
    */
   conventions?: RepoConventions;
+  /**
+   * Set by the orchestrator (see `executeWithRepair`) ONLY when re-invoking
+   * `execute()` to fix a change whose post-execution checks failed. Absent on
+   * the first execution. Adapters render it as structured "fix your prior
+   * diff" feedback; see {@link RepairContext}.
+   */
+  repair?: RepairContext;
 }
 
 /** Result of `plan()`: what the adapter intends to do, for logs/audit trail. */

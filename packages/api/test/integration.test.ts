@@ -489,6 +489,7 @@ describe('acceptance 5: patch failure lands on patch.failed with the error prese
         run: async () => ({
           ok: false as const,
           error: 'diff ceiling exceeded: triage likely misclassified this item',
+          repairAttempts: 0,
         }),
       },
       apiKeys: [{ key: OWNER_KEY, tier: 'owner' as const }],
