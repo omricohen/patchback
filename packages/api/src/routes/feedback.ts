@@ -7,7 +7,7 @@ import type {
   Submitter,
   TrustTier,
 } from '@patchback/types';
-import { INITIAL_JOB_STATE } from '@patchback/types';
+import { INITIAL_JOB_STATE, parseSourceHint } from '@patchback/types';
 
 import type { ApiConfig } from '../config.js';
 import { ApiError, notFound } from '../errors.js';
@@ -228,14 +228,34 @@ interface CreateItemInput {
   at: string;
 }
 
+// Defense in depth: the ingest schema is only a loose shape gate, so a hint
+// like `../../.env:1` is shape-valid and would otherwise be stored and rendered
+// into the triage prompt (the brief factory drops it later, but it should never
+// persist). Re-run the authoritative parseSourceHint at ingest and drop any hint
+// that fails, so hostile hints never reach the store, the triage LLM, or a
+// dashboard. A valid hint is normalized to its file:line form.
+function sanitizeCapture(capture: CaptureContext): CaptureContext {
+  const element = capture.element;
+  if (element?.sourceHint === undefined) return capture;
+  const parsed = parseSourceHint(element.sourceHint);
+  const normalized = { ...element };
+  if (parsed) {
+    normalized.sourceHint = `${parsed.file}:${parsed.line}`;
+  } else {
+    delete normalized.sourceHint;
+  }
+  return { ...capture, element: normalized };
+}
+
 async function createItemWithJob(
   store: Store,
   input: CreateItemInput,
 ): Promise<{ item: FeedbackItem; job: Job; readToken: string }> {
-  const { at, ...fields } = input;
+  const { at, capture, ...fields } = input;
   const item: FeedbackItem = {
     id: generateId(),
     ...fields,
+    ...(capture !== undefined ? { capture: sanitizeCapture(capture) } : {}),
     createdAt: at,
     updatedAt: at,
   };

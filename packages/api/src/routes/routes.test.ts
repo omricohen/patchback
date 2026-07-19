@@ -199,6 +199,27 @@ describe('POST /feedback schema enforcement', () => {
     }
   });
 
+  it('drops a shape-valid but semantically-invalid sourceHint at ingest', async () => {
+    const { app, store } = makeApp();
+    // Passes the loose ajv charset+line pattern, but parseSourceHint rejects it
+    // (traversal + dot-prefixed segment). It must never persist or reach triage.
+    const response = await app.inject({
+      method: 'POST',
+      url: '/feedback',
+      payload: {
+        message: 'The toolbar button label has a typo',
+        capture: {
+          element: { domPath: '#export-btn', sourceHint: '../../.env:1' },
+        },
+      },
+    });
+    expect(response.statusCode).toBe(201);
+    const stored = await store.getFeedback(response.json().id as string);
+    // Element is kept; the poisoned hint is stripped.
+    expect(stored?.capture?.element?.domPath).toBe('#export-btn');
+    expect(stored?.capture?.element?.sourceHint).toBeUndefined();
+  });
+
   it('rejects missing/empty/oversized messages', async () => {
     const { app } = makeApp();
     for (const payload of [
