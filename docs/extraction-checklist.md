@@ -76,13 +76,40 @@ bottom._
 - [ ] README quickstart verified cold, timed under 10 minutes by someone other than Omri.
 - [ ] Demo GIF flow reproducible on `examples/nextjs-demo`.
 
+## v0.2 hardening addendum (2026-07-20)
+
+The v0.2 feature set (source provenance, bounded repair loop, repo-aware triage
+stage 2, GitHub Action mode, per-user token exchange, feedback outcome view) was
+re-swept on branch `v2-7-hardening` before the version bump to `0.2.0`:
+
+- [x] **gitleaks clean on full history AND committed tree.** `gitleaks git`
+      (109 commits, `.gitleaks.toml`): no leaks. `gitleaks dir`: the only 8 raw
+      findings are all in **untracked/gitignored** files (`.env`, `examples/nextjs-demo/.next/`
+      build artifacts) — 0 in git-tracked source (`git ls-files` cross-check).
+      Two synthetic HMAC signing-secret fixtures (`feedback.emitter.test.ts:32`,
+      `ci.e2e.test.ts:19`, both `<prefix>-signing-secret-0123456789…`) were added
+      to the fixtures-only allowlist. `git log --all --diff-filter=A -- .env` empty
+      (`.env` still never committed).
+- [x] **Forbidden-content sweep clean on tree + history.** No client identifiers;
+      "Mission Control" appears only in the rule text (CLAUDE.md + this file); no
+      `.internal`/`.corp`/`.intranet` hostnames; no private-range IPs in source;
+      no real absolute home paths — every `/Users/` string is a synthetic
+      `example-user`/`someone`/`you` fixture for the provenance path-privacy tests
+      or documentation of that behavior. `extraction-inbox/` still gitignored + empty.
+- [x] **npm publish dry-run green for all 11 public packages at `0.2.0`.**
+      `pnpm -r publish --dry-run --no-git-checks` succeeds for the ten `@patchback/*`
+      packages (including the new `@patchback/provenance`) plus `patchback`; every
+      tarball contains only `dist/`, `README.md`, `LICENSE`, and `package.json`
+      (no tests/fixtures/src/`.env`); `workspace:*` deps resolve to `0.2.0`
+      (verified by unpacking `@patchback/sdk` → `@patchback/types: 0.2.0`).
+
 ## Remaining — requires Omri
 
 Everything still open needs real credentials, a real npm publish, a second human, or
 GitHub settings access:
 
-1. **Real npm publish** of all 10 public packages (`pnpm -r publish` after `npm login`;
-   dry-run already green).
+1. **Real npm publish** of all 11 public packages at `0.2.0` (`pnpm -r publish` after
+   `npm login`; dry-run already green — see the v0.2 addendum above).
 2. **`npx patchback dev` from a clean machine** via the published packages (blocked on
    1).
 3. **Stranger's-repo gauntlet** — 3 unfamiliar repos, one expected graceful failure
