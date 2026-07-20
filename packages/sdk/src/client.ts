@@ -1,6 +1,6 @@
 import type { CaptureContext, Submitter } from '@patchback/types';
 
-import { apiErrorFromBody } from './errors.js';
+import { apiErrorFromBody, PatchbackApiError } from './errors.js';
 import type {
   FeedbackThreadResponse,
   JobStatusResponse,
@@ -26,6 +26,21 @@ export type FetchLike = (
   json(): Promise<unknown>;
 }>;
 
+/**
+ * A short-lived per-user token and its expiry, as returned by the embedding
+ * app's OWN backend endpoint (which exchanges its server key at Patchback's
+ * `POST /tokens/exchange`). The SDK never calls `/tokens/exchange` itself — it
+ * has no parent key and that endpoint rejects browsers.
+ */
+export interface TokenGrant {
+  token: string;
+  /** ISO-8601 expiry; the SDK refreshes shortly before this. */
+  expiresAt: string;
+}
+
+/** A provider the embedding app supplies: fetch a fresh token from ITS backend. */
+export type TokenProvider = () => Promise<TokenGrant>;
+
 export interface PatchbackClientOptions {
   /** API base URL, e.g. `http://localhost:8787` or `/patchback-api`. */
   baseUrl: string;
@@ -33,10 +48,23 @@ export interface PatchbackClientOptions {
    * The EMBEDDING APP's API key (owner/insider tier). Optional — absent
    * means submissions land as `outsider` (data only). See the trust-model
    * warning in the README before shipping a key to a page.
+   *
+   * For PUBLIC-FACING apps prefer `getToken` instead: a short-lived,
+   * tier-scoped per-user token that is safe to expose in page source.
+   * `apiKey` and `getToken` are mutually exclusive.
    */
   apiKey?: string;
+  /**
+   * A short-lived-token provider (recommended for multi-user / public-facing
+   * apps). The SDK calls it to obtain the credential, caches the token, and
+   * re-invokes it shortly before `expiresAt` (and once on a tier-related 4xx).
+   * Mutually exclusive with `apiKey`. See the "Per-user tokens" README section.
+   */
+  getToken?: TokenProvider;
   /** Injectable fetch. Defaults to the global. */
   fetch?: FetchLike;
+  /** Clock injection for deterministic tests. Defaults to `Date.now`. */
+  now?: () => number;
 }
 
 /**
@@ -82,6 +110,14 @@ export function createPatchbackClient(
 ): PatchbackClient {
   const baseUrl = options.baseUrl.replace(/\/+$/, '');
   const apiKey = options.apiKey;
+  const getToken = options.getToken;
+  if (apiKey !== undefined && getToken !== undefined) {
+    throw new TypeError(
+      '@patchback/sdk: pass either `apiKey` OR `getToken`, not both — the ' +
+        'direct key and the per-user token path are mutually exclusive',
+    );
+  }
+  const now = options.now ?? ((): number => Date.now());
   const doFetch: FetchLike =
     options.fetch ?? (globalThis.fetch as unknown as FetchLike);
   if (typeof doFetch !== 'function') {
@@ -90,16 +126,32 @@ export function createPatchbackClient(
     );
   }
 
-  function authHeader(auth: ReadAuth): Record<string, string> {
-    if ('readToken' in auth) {
-      return { authorization: `Bearer ${auth.readToken}` };
+  // Whether this client carries an app-level credential (key or token) — the
+  // capability required to read via `useApiKey` and to start jobs.
+  const hasAppCredential = apiKey !== undefined || getToken !== undefined;
+
+  // Refresh a cached token this many ms before it actually expires.
+  const REFRESH_SKEW_MS = 5000;
+  let cached: { token: string; expiresAtMs: number } | undefined;
+
+  /** The current app-credential bearer value (fresh token / static key / none). */
+  async function appCredential(forceRefresh = false): Promise<string | undefined> {
+    if (apiKey !== undefined) {
+      return apiKey;
     }
-    if (apiKey === undefined) {
-      throw new TypeError(
-        '@patchback/sdk: `useApiKey: true` requires an apiKey in the client options',
-      );
+    if (getToken === undefined) {
+      return undefined;
     }
-    return { authorization: `Bearer ${apiKey}` };
+    if (
+      !forceRefresh &&
+      cached !== undefined &&
+      now() < cached.expiresAtMs - REFRESH_SKEW_MS
+    ) {
+      return cached.token;
+    }
+    const grant = await getToken();
+    cached = { token: grant.token, expiresAtMs: Date.parse(grant.expiresAt) };
+    return grant.token;
   }
 
   async function request<T>(
@@ -128,6 +180,53 @@ export function createPatchbackClient(
     return parsed as T;
   }
 
+  /**
+   * Run an app-credentialed request. On a tier-related 403 with a token
+   * provider, refresh the token ONCE and retry — a stale (expired) token
+   * demotes to outsider server-side, so a refresh may recover the tier.
+   */
+  async function withAppCredential<T>(
+    run: (bearer: string) => Promise<T>,
+  ): Promise<T> {
+    const bearer = await appCredential();
+    if (bearer === undefined) {
+      throw new TypeError(
+        '@patchback/sdk: this call requires an `apiKey` or `getToken` in the ' +
+          'client options',
+      );
+    }
+    try {
+      return await run(bearer);
+    } catch (error) {
+      if (
+        getToken !== undefined &&
+        error instanceof PatchbackApiError &&
+        error.status === 403 &&
+        (error.code === 'tier_forbidden' || error.code === 'tier_ceiling')
+      ) {
+        const refreshed = await appCredential(true);
+        if (refreshed !== undefined && refreshed !== bearer) {
+          return run(refreshed);
+        }
+      }
+      throw error;
+    }
+  }
+
+  async function authHeader(auth: ReadAuth): Promise<Record<string, string>> {
+    if ('readToken' in auth) {
+      return { authorization: `Bearer ${auth.readToken}` };
+    }
+    const bearer = await appCredential();
+    if (bearer === undefined) {
+      throw new TypeError(
+        '@patchback/sdk: `useApiKey: true` requires an `apiKey` or `getToken` ' +
+          'in the client options',
+      );
+    }
+    return { authorization: `Bearer ${bearer}` };
+  }
+
   return {
     async submitFeedback(input) {
       // Typed request builder — never a spread of a caller object, so the
@@ -139,8 +238,9 @@ export function createPatchbackClient(
           : {}),
         ...(input.capture !== undefined ? { capture: input.capture } : {}),
       };
+      const bearer = await appCredential();
       const headers: Record<string, string> =
-        apiKey !== undefined ? { authorization: `Bearer ${apiKey}` } : {};
+        bearer !== undefined ? { authorization: `Bearer ${bearer}` } : {};
       return request<SubmitResponse>('POST', '/feedback', headers, body);
     },
 
@@ -148,7 +248,7 @@ export function createPatchbackClient(
       return request<FeedbackThreadResponse>(
         'GET',
         `/feedback/${encodeURIComponent(id)}`,
-        authHeader(auth),
+        await authHeader(auth),
       );
     },
 
@@ -156,7 +256,7 @@ export function createPatchbackClient(
       return request<JobStatusResponse>(
         'GET',
         `/jobs/${encodeURIComponent(jobId)}/status`,
-        authHeader(auth),
+        await authHeader(auth),
       );
     },
 
@@ -164,21 +264,24 @@ export function createPatchbackClient(
       return request<SubmitResponse>(
         'POST',
         `/feedback/${encodeURIComponent(feedbackId)}/reply`,
-        authHeader(auth),
+        await authHeader(auth),
         { message },
       );
     },
 
     async startJob(jobId) {
-      if (apiKey === undefined) {
+      if (!hasAppCredential) {
         throw new TypeError(
-          '@patchback/sdk: startJob requires an apiKey in the client options',
+          '@patchback/sdk: startJob requires an `apiKey` or `getToken` in the ' +
+            'client options',
         );
       }
-      return request<StartJobResponse>(
-        'POST',
-        `/jobs/${encodeURIComponent(jobId)}/start`,
-        { authorization: `Bearer ${apiKey}` },
+      return withAppCredential((bearer) =>
+        request<StartJobResponse>(
+          'POST',
+          `/jobs/${encodeURIComponent(jobId)}/start`,
+          { authorization: `Bearer ${bearer}` },
+        ),
       );
     },
   };

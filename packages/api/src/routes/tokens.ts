@@ -166,10 +166,19 @@ export function registerTokenRoutes(
 }
 
 /**
- * Layer 2: reject anything carrying a browser-fetch indicator. `Origin` and
- * `Sec-Fetch-*` are forbidden header names — a page cannot set or remove them,
- * so a browser cannot disguise itself as a server, and a server-to-server
- * client never sends them.
+ * Layer 2: reject anything carrying a reliable browser-fetch indicator.
+ *
+ * `Origin`, `Sec-Fetch-Site`, and `Sec-Fetch-Dest` are forbidden header names
+ * a page cannot set or remove, and — critically — a real server-to-server
+ * client does NOT send them. Every modern browser attaches `Sec-Fetch-Site`
+ * to every request and `Origin` to every non-GET (so a browser POST here
+ * carries both), while a Node `fetch`/curl caller sends neither.
+ *
+ * We deliberately do NOT reject on `Sec-Fetch-Mode`: Node's built-in
+ * (undici) `fetch` sets `sec-fetch-mode: cors` on ordinary POSTs, so it is
+ * NOT a browser-only signal and rejecting on it would break the legitimate
+ * app-backend caller. `Origin` + `Sec-Fetch-Site` already catch every real
+ * browser.
  */
 async function rejectBrowserOrigin(
   request: FastifyRequest,
@@ -179,7 +188,6 @@ async function rejectBrowserOrigin(
   if (
     h.origin !== undefined ||
     h['sec-fetch-site'] !== undefined ||
-    h['sec-fetch-mode'] !== undefined ||
     h['sec-fetch-dest'] !== undefined
   ) {
     throw new ApiError(

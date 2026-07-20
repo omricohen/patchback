@@ -124,11 +124,11 @@ describe('POST /tokens/exchange — server-only enforcement', () => {
     );
   });
 
-  it('rejects Sec-Fetch-* indicators (403 server_only)', async () => {
+  it('rejects Sec-Fetch-Site / Sec-Fetch-Dest indicators (403 server_only)', async () => {
     const app = makeApp();
     const cases: Record<string, string>[] = [
       { 'sec-fetch-site': 'cross-site' },
-      { 'sec-fetch-mode': 'cors' },
+      { 'sec-fetch-site': 'same-origin' },
       { 'sec-fetch-dest': 'empty' },
     ];
     for (const headers of cases) {
@@ -138,6 +138,15 @@ describe('POST /tokens/exchange — server-only enforcement', () => {
         'server_only',
       );
     }
+  });
+
+  it('allows a server caller that sends only Sec-Fetch-Mode (Node fetch sets it)', async () => {
+    const app = makeApp();
+    const res = await exchange(app, {
+      key: OWNER_KEY,
+      headers: { 'sec-fetch-mode': 'cors' },
+    });
+    expect(res.statusCode).toBe(201);
   });
 
   it('is NEVER CORS-exposed: a preflight gets no Access-Control-Allow-Origin, even with cors configured', async () => {
