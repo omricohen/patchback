@@ -95,6 +95,16 @@ export interface ExecutionResult {
 export interface AgentSummary {
   title: string;
   body: string;
+  /**
+   * OPTIONAL plain-language, non-technical summary of what changed, in the
+   * submitter's terms — one or two sentences, no diff/file names/jargon.
+   * Distinct from the technical `body`. Surfaced to the feedback submitter as
+   * `Job.userSummary`. Additive and absent-safe: when the adapter cannot
+   * produce one (e.g. the agent omitted it), it is left undefined and nothing
+   * downstream renders — it is NEVER fabricated. DISPLAY-only output; never
+   * fed back into the pipeline as instructions.
+   */
+  userSummary?: string;
 }
 
 /**

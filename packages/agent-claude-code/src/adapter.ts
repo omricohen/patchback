@@ -16,7 +16,11 @@ import {
 } from '@patchback/agent-core';
 
 import { buildPrompt } from './prompt.js';
-import { parseCliOutput } from './result.js';
+import {
+  extractUserSummary,
+  parseCliOutput,
+  stripUserSummaryLine,
+} from './result.js';
 
 /** Default ceiling: a patchable item should be a small, focused change. */
 export const DEFAULT_MAX_CHANGED_LINES = 300;
@@ -118,6 +122,11 @@ export interface ClaudeCodeAdapterOptions {
 
 interface JobRunState {
   execution?: ExecutionResult;
+  /**
+   * Plain-language summary parsed from the successful run's output, if the
+   * agent emitted the sentinel. Absent-safe; only set on success.
+   */
+  userSummary?: string;
 }
 
 /**
@@ -244,7 +253,11 @@ export function createClaudeCodeAdapter(
       }
 
       const parsed = parseCliOutput(outcome.stdout);
-      const outputTail = parsed.resultText.slice(-DEFAULT_OUTPUT_TAIL_CHARS);
+      // The machine sentinel line (if any) is for extraction only — keep it
+      // out of the human-facing output tail that lands in the PR body/logs.
+      const outputTail = stripUserSummaryLine(parsed.resultText).slice(
+        -DEFAULT_OUTPUT_TAIL_CHARS,
+      );
 
       if (outcome.exitCode !== 0 || parsed.isError) {
         const detail = (parsed.resultText || outcome.stderr).slice(
@@ -299,12 +312,18 @@ export function createClaudeCodeAdapter(
         totalChangedLines: changedLines,
         agentOutput: outputTail,
       };
-      stateFor(ctx).execution = execution;
+      const state = stateFor(ctx);
+      state.execution = execution;
+      // Best-effort: pull the plain-language summary line the prompt asked
+      // for out of the FULL result text (not the sliced tail). Absent when
+      // the agent omitted the sentinel — never fabricated.
+      state.userSummary = extractUserSummary(parsed.resultText);
       return execution;
     },
 
     async summarize(ctx) {
-      const execution = stateFor(ctx).execution;
+      const state = stateFor(ctx);
+      const execution = state.execution;
       const bodyParts: string[] = [ctx.brief.description, ''];
 
       if (ctx.brief.feedbackId !== undefined) {
@@ -343,6 +362,9 @@ export function createClaudeCodeAdapter(
       const summary: AgentSummary = {
         title: ctx.brief.title,
         body: bodyParts.join('\n'),
+        ...(state.userSummary !== undefined
+          ? { userSummary: state.userSummary }
+          : {}),
       };
       return summary;
     },

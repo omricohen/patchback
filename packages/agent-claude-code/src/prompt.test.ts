@@ -45,6 +45,19 @@ describe('buildPrompt', () => {
     const prompt = buildPrompt(labelChangeBrief(), undefined, 300);
     expect(prompt).not.toContain('Repository conventions');
   });
+
+  it('asks for a plain-language user summary via the sentinel, even on repair', () => {
+    const plain = buildPrompt(labelChangeBrief(), undefined, 300);
+    expect(plain).toContain('## Final step (required)');
+    expect(plain).toContain('<<<PATCHBACK_USER_SUMMARY>>>');
+    const repair = buildPrompt(labelChangeBrief(), undefined, 300, {
+      attempt: 1,
+      failingChecks: [
+        { name: 'test', command: 'npm run test', outputTail: 'boom' },
+      ],
+    });
+    expect(repair).toContain('<<<PATCHBACK_USER_SUMMARY>>>');
+  });
 });
 
 describe('buildPrompt — repair section', () => {

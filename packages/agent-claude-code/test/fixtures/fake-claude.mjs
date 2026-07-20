@@ -97,12 +97,21 @@ function writeDotDirArtifacts() {
 }
 
 function printResult(resultText, isError = false) {
+  // Optionally append the plain-language user-summary line the real prompt
+  // asks for, so the adapter's userSummary extraction can be exercised.
+  // FAKE_CLAUDE_USER_SUMMARY sets the text; when unset, no sentinel is emitted
+  // (the absent-safe path).
+  let result = resultText;
+  const summary = process.env.FAKE_CLAUDE_USER_SUMMARY;
+  if (summary !== undefined && summary !== '') {
+    result = `${resultText}\n<<<PATCHBACK_USER_SUMMARY>>> ${summary}`;
+  }
   process.stdout.write(
     JSON.stringify({
       type: 'result',
       subtype: isError ? 'error_during_execution' : 'success',
       is_error: isError,
-      result: resultText,
+      result,
       duration_ms: 42,
       num_turns: 1,
       session_id: 'fake-session',
