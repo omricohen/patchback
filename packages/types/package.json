@@ -1,6 +1,6 @@
 {
   "name": "@patchback/types",
-  "version": "0.0.1",
+  "version": "0.2.0",
   "description": "Shared types: feedback items, job states, trust tiers",
   "keywords": [
     "patchback",

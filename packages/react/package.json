@@ -1,6 +1,6 @@
 {
   "name": "@patchback/react",
-  "version": "0.0.1",
+  "version": "0.2.0",
   "description": "React wrapper and hooks for the Patchback widget",
   "keywords": [
     "patchback",

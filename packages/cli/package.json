@@ -1,6 +1,6 @@
 {
   "name": "patchback",
-  "version": "0.0.1",
+  "version": "0.2.0",
   "description": "Patchback CLI, including npx patchback dev",
   "keywords": [
     "patchback",
