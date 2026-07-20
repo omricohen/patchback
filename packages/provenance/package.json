@@ -1,6 +1,6 @@
 {
   "name": "@patchback/provenance",
-  "version": "0.0.1",
+  "version": "0.2.0",
   "description": "Build-time source provenance: stamp rendered elements with data-pb-source file:line annotations",
   "keywords": [
     "patchback",

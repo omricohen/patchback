@@ -1,6 +1,6 @@
 {
   "name": "@patchback/github",
-  "version": "0.0.1",
+  "version": "0.2.0",
   "description": "GitHub integration: issues, branches, PRs (token + App modes)",
   "keywords": [
     "patchback",
