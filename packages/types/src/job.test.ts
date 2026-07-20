@@ -299,6 +299,10 @@ describe('isSafeHttpUrl', () => {
     '/relative/path',
     '',
     '   ',
+    // Embedded credentials: leak secrets into an anchor and can disguise the
+    // real host from the reader.
+    'https://user:pass@example.com/preview',
+    'http://user@example.com/preview',
   ])('rejects %s', (url) => {
     expect(isSafeHttpUrl(url)).toBe(false);
   });

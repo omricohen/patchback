@@ -106,8 +106,8 @@ export const MAX_URL_LENGTH = 2000;
  * {@link MAX_URL_LENGTH}. This is the single gate that keeps a
  * `javascript:` / `data:` / other-scheme URI out of `Job.previewUrl` at the
  * point of storage (and, defensively, again before render). Anything that is
- * not a string, not parseable as a URL, or not `http:`/`https:` returns
- * `false`.
+ * not a string, not parseable as a URL, not `http:`/`https:`, or carrying
+ * embedded credentials (`user:pass@`) returns `false`.
  */
 export function isSafeHttpUrl(value: unknown): value is string {
   if (typeof value !== 'string' || value.length > MAX_URL_LENGTH) {
@@ -119,7 +119,13 @@ export function isSafeHttpUrl(value: unknown): value is string {
   } catch {
     return false;
   }
-  return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return false;
+  }
+  // Defense in depth: a preview URL never legitimately carries credentials, and
+  // a `user:pass@host` form both leaks secrets into an anchor and can disguise
+  // the real host from the reader. Reject it.
+  return parsed.username === '' && parsed.password === '';
 }
 
 /** One entry in a job's audit trail of state changes. */
