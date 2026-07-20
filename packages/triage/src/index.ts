@@ -24,3 +24,20 @@ export {
 } from './threshold.js';
 export { SYSTEM_PROMPT, type ThreadContext } from './prompt.js';
 export { TRIAGE_OUTPUT_SCHEMA } from './schema.js';
+export {
+  type RepoProbe,
+  type ProbeResult,
+  type ProbeMatchFile,
+} from './probe.js';
+export {
+  DEFAULT_RETRIEVAL_BAND,
+  DEFAULT_MAX_UNAMBIGUOUS_MATCHES,
+  MAX_QUERIES,
+  isBorderline,
+  deriveProbeQueries,
+  reconcile,
+  isUnambiguous,
+  renderProbeEvidence,
+  rung,
+} from './retrieval.js';
+export { RETRIEVAL_SYSTEM_PROMPT } from './prompt.js';
