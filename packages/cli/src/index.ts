@@ -14,11 +14,12 @@
 import { realpathSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 
+import { readIssueEvent, runCi } from './ci.js';
 import { loadConfigFile, CONFIG_FILE_NAME } from './config-file.js';
 import { runDev, renderDevBanner } from './dev.js';
 import { loadDotEnv } from './env.js';
 import { CliError } from './errors.js';
-import { runInit } from './init.js';
+import { runInit, runInitGithubAction } from './init.js';
 
 export type { PatchbackConfig } from './config-file.js';
 export {
@@ -63,18 +64,45 @@ export {
   type DevSeams,
   type DevSecrets,
 } from './dev.js';
-export { runInit, type InitOptions, type InitResult } from './init.js';
+export {
+  runInit,
+  runInitGithubAction,
+  type InitOptions,
+  type InitResult,
+  type InitGithubActionOptions,
+  type InitGithubActionResult,
+} from './init.js';
+export {
+  readIssueEvent,
+  runCi,
+  type CiIssueEvent,
+  type CiOutcome,
+  type CiResult,
+  type CiSeams,
+  type CiSecrets,
+  type RunCiOptions,
+} from './ci.js';
+export {
+  renderWorkflow,
+  type WorkflowTemplateOptions,
+} from './workflow-template.js';
 
-const HELP = `patchback — feedback → triage → agent → pull request (dev loop)
+const HELP = `patchback — feedback → triage → agent → pull request
 
 Usage:
-  patchback init [--force]     Interactive setup (writes ${CONFIG_FILE_NAME} + .env)
-  patchback dev [--port N]     Run the local API + workers + widget (in-memory)
-  patchback help               Show this help
-  patchback version            Print the version
+  patchback init [--force]              Interactive setup (writes ${CONFIG_FILE_NAME} + .env)
+  patchback init --github-action        Scaffold GitHub Action mode (workflow + gh secret steps)
+  patchback dev [--port N]              Run the local API + workers + widget (in-memory)
+  patchback ci                          Process a patchback issue inside GitHub Actions
+  patchback help                        Show this help
+  patchback version                     Print the version
 
 patchback dev needs no Redis and no Postgres. Secrets are read from the
 environment / .env (GITHUB_TOKEN, ANTHROPIC_API_KEY) and are never printed.
+
+patchback ci runs inside a GitHub Action on a labeled patchback issue: it
+verifies the issue's signed HMAC marker and, only then, drives the item through
+triage and (if patchable) the patch pipeline to open a PR. It never merges.
 `;
 
 async function commandDev(args: string[]): Promise<void> {
@@ -139,15 +167,88 @@ async function commandDev(args: string[]): Promise<void> {
 async function commandInit(args: string[]): Promise<void> {
   const parsed = parseArgs({
     args,
-    options: { force: { type: 'boolean' } },
+    options: {
+      force: { type: 'boolean' },
+      'github-action': { type: 'boolean' },
+    },
     allowPositionals: false,
   });
+  if (parsed.values['github-action'] === true) {
+    await runInitGithubAction({
+      cwd: process.cwd(),
+      input: process.stdin,
+      output: process.stdout,
+      ...(parsed.values.force === true ? { force: true } : {}),
+    });
+    return;
+  }
   await runInit({
     cwd: process.cwd(),
     input: process.stdin,
     output: process.stdout,
     ...(parsed.values.force === true ? { force: true } : {}),
   });
+}
+
+async function commandCi(args: string[]): Promise<void> {
+  parseArgs({ args, options: {}, allowPositionals: false });
+  const cwd = process.cwd();
+  await loadDotEnv(cwd);
+  const config = await loadConfigFile(cwd);
+
+  const repo = process.env.GITHUB_REPOSITORY;
+  if (repo === undefined || repo === '') {
+    throw new CliError(
+      'GITHUB_REPOSITORY is not set — `patchback ci` runs inside GitHub Actions.',
+    );
+  }
+  const eventPath = process.env.GITHUB_EVENT_PATH;
+  if (eventPath === undefined || eventPath === '') {
+    throw new CliError(
+      'GITHUB_EVENT_PATH is not set — `patchback ci` runs inside GitHub Actions.',
+    );
+  }
+  const event = await readIssueEvent(eventPath);
+
+  const result = await runCi({
+    config,
+    repo,
+    event,
+    secrets: {
+      ...(process.env.GITHUB_TOKEN !== undefined
+        ? { githubToken: process.env.GITHUB_TOKEN }
+        : {}),
+      ...(process.env.ANTHROPIC_API_KEY !== undefined
+        ? { anthropicApiKey: process.env.ANTHROPIC_API_KEY }
+        : {}),
+      ...(process.env.PATCHBACK_SIGNING_SECRET !== undefined
+        ? { signingSecret: process.env.PATCHBACK_SIGNING_SECRET }
+        : {}),
+    },
+    log: (line) => process.stdout.write(`${line}\n`),
+  });
+
+  switch (result.outcome) {
+    case 'neutral':
+      process.stdout.write('patchback ci: neutral exit (no valid marker).\n');
+      break;
+    case 'needs_human':
+    case 'needs_clarification':
+      process.stdout.write(
+        `patchback ci: triage → ${result.outcome}; commented on issue #${result.issueNumber}, no PR.\n`,
+      );
+      break;
+    case 'patched':
+      process.stdout.write(
+        `patchback ci: opened PR${result.prNumber !== undefined ? ` #${result.prNumber}` : ''} — review required (never merged).\n`,
+      );
+      break;
+    case 'patch_failed':
+      process.stdout.write(
+        `patchback ci: patch failed — commented the reason on issue #${result.issueNumber}.\n`,
+      );
+      break;
+  }
 }
 
 async function readOwnVersion(): Promise<string> {
@@ -165,6 +266,9 @@ export async function main(argv: string[]): Promise<void> {
       return;
     case 'init':
       await commandInit(rest);
+      return;
+    case 'ci':
+      await commandCi(rest);
       return;
     case 'version':
     case '--version':
