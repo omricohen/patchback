@@ -1,11 +1,17 @@
 import cors from '@fastify/cors';
 import Fastify, { type FastifyInstance } from 'fastify';
 
-import { resolveAuth, type RequestAuth } from './auth.js';
+import {
+  resolveAuth,
+  type BrowserTokenVerifier,
+  type RequestAuth,
+} from './auth.js';
+import { verifyBrowserToken } from './browser-token.js';
 import { validateConfig, type ApiConfig } from './config.js';
 import { ApiError, StoreIntegrityError } from './errors.js';
 import { registerFeedbackRoutes } from './routes/feedback.js';
 import { registerJobRoutes } from './routes/jobs.js';
+import { registerTokenRoutes, resolveTokenExchange } from './routes/tokens.js';
 import { registerWebhookRoutes } from './routes/webhooks.js';
 
 declare module 'fastify' {
@@ -56,11 +62,27 @@ export function buildServer(config: ApiConfig): FastifyInstance {
     });
   }
 
+  // Build the browser-token verifier ONCE (secret + clock closed over) when
+  // token exchange is configured, and share the resolved secret with the
+  // minting route so verify and mint always agree. Absent config ⇒ the
+  // verifier is `undefined` and `resolveAuth` behaves byte-identically.
+  let tokenVerifier: BrowserTokenVerifier | undefined;
+  const resolvedExchange =
+    config.tokenExchange !== undefined
+      ? resolveTokenExchange(config)
+      : undefined;
+  if (resolvedExchange !== undefined) {
+    const nowOpt = config.now !== undefined ? { now: config.now } : {};
+    tokenVerifier = (token) =>
+      verifyBrowserToken(token, resolvedExchange.secret, nowOpt);
+  }
+
   app.decorateRequest('auth', null as unknown as RequestAuth);
   app.addHook('onRequest', async (request) => {
     request.auth = resolveAuth(
       request.headers.authorization,
       config.apiKeys ?? [],
+      tokenVerifier,
     );
   });
 
@@ -110,6 +132,9 @@ export function buildServer(config: ApiConfig): FastifyInstance {
 
   registerFeedbackRoutes(app, config);
   registerJobRoutes(app, config);
+  if (resolvedExchange !== undefined) {
+    registerTokenRoutes(app, config, resolvedExchange);
+  }
   if (config.webhookSecret !== undefined) {
     registerWebhookRoutes(app, {
       webhookSecret: config.webhookSecret,

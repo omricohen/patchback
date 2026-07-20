@@ -16,7 +16,27 @@ export {
   type ApiConfig,
   type ApiKeyEntry,
 } from './config.js';
-export { resolveAuth, type RequestAuth } from './auth.js';
+export {
+  resolveAuth,
+  type AuthVia,
+  type BrowserTokenVerifier,
+  type RequestAuth,
+} from './auth.js';
+export {
+  BROWSER_TOKEN_PREFIX,
+  BROWSER_TOKEN_VERSION,
+  DEFAULT_MAX_TOKEN_TTL_MS,
+  DEFAULT_TOKEN_TTL_MS,
+  mintBrowserToken,
+  signBrowserToken,
+  verifyBrowserToken,
+  type BrowserTokenPayload,
+  type BrowserTokenRejectReason,
+  type MintableTier,
+  type MintBrowserTokenInput,
+  type VerifyBrowserTokenOptions,
+  type VerifyBrowserTokenResult,
+} from './browser-token.js';
 export {
   API_ERROR_CODES,
   ApiError,
@@ -55,7 +75,8 @@ export {
   type VerifyMarkerResult,
 } from './issue-marker.js';
 export { generateId, generateReadToken, hashReadToken } from './ids.js';
-export { minTrustTier } from './trust.js';
+export { constantTimeHexEqual, hmacHex } from './hmac.js';
+export { minTrustTier, tierAtMost } from './trust.js';
 export { runTriageTask } from './workers/triage-worker.js';
 export { runPatchTask } from './workers/patch-worker.js';
 export { DEFAULT_BRIEF_CONSTRAINTS } from './workers/patch-worker.js';
