@@ -1,13 +1,60 @@
 # STATE — where we left off
 
-_Last updated: 2026-07-19 (v0.2 Phase 4 session)_
+_Last updated: 2026-07-20 (v0.2 Phase 5 session)_
 
 ## Current phase
 
+**v0.2 Phase 5 — Per-user token exchange: DONE (offline gate green)** on branch
+`v2-5-token-exchange` (branched from up-to-date main; NOT merged, NOT pushed —
+Omri's call). Phases 1–4 (`v2-1-provenance`, `v2-2-repair-loop`,
+`v2-3-triage-retrieval`, `v2-4-action-mode`) are still unmerged too. Plan:
+`.a5c/runs/01KXXPDF1Y7TMPE4J22S3GNN6K/artifacts/phase-5-plan.md` (approved with
+owner decisions: stateless signed HMAC tokens; expired/invalid ⇒ fail closed to
+outsider, not 401; additive/opt-in via `ApiConfig.tokenExchange`).
+
+### What's done (Phase 5)
+
+- **Stateless browser token** (`packages/api/src/browser-token.ts`, new) —
+  signed HMAC `pbt_`-prefixed token carrying `tier` + `exp` (+ audit-only
+  `sub`), mirroring the issue-marker discipline. Shared crypto factored into
+  `packages/api/src/hmac.ts` (canonicalJson/hmacHex/constantTimeHexEqual), which
+  issue-marker now imports (marker behavior byte-identical). `sign`/`mint`/
+  `verifyBrowserToken` with a full tamper battery + expiry-boundary tests.
+- **`resolveAuth`** — gains a `via` discriminator (`api-key` |
+  `browser-token` | `read-token-candidate` | `none`) + optional `subject`, and
+  a third `tokenVerifier` arg. API keys checked FIRST (direct-key path
+  byte-identical); a valid `pbt_` token ⇒ its minted tier; expired/invalid ⇒
+  fails closed to outsider. Absent-config byte-identical test pins
+  three-arg-undefined === two-arg.
+- **`POST /tokens/exchange`** (`packages/api/src/routes/tokens.ts`, new;
+  registered only when `config.tokenExchange` set) — requires a real parent API
+  key (browser-token caller rejected ⇒ no chaining), ceilings the minted tier
+  via `tierAtMost` (higher ⇒ 403 `tier_ceiling`, `outsider` ⇒ 400 schema),
+  clamps TTL (default 15m/max 60m), rejects browser indicators
+  (`Origin`/`Sec-Fetch-Site`/`Sec-Fetch-Dest` — NOT `Sec-Fetch-Mode`, which
+  Node's undici fetch sets), and strips all CORS headers from the route via
+  `onSend`. New error codes `tier_ceiling`/`server_only`.
+- **config/server** — `ApiConfig.tokenExchange { signingSecret?, defaultTtlMs?,
+maxTtlMs? }`; ephemeral per-process secret + warning when secret omitted;
+  validateConfig checks secret length, TTL bounds, and the reserved-prefix key
+  guard (only when tokenExchange on ⇒ absent-config byte-identical).
+- **SDK/widget** — `PatchbackClientOptions.getToken` / `PatchbackWidgetConfig.
+getToken` (mutually exclusive with `apiKey`, validated): fetch a short-lived
+  token from the APP's own backend, cache it, refresh before expiry (+ retry
+  once on a tier 4xx). End-to-end SDK contract test (exchange → getToken →
+  submit/start with clock-driven refresh); widget test for the token auth path.
+- **Docs** — SPEC security item #8; README "Public-facing apps: token exchange"
+  - SDK/widget README sections (direct-key warnings preserved); DECISIONS
+    (2026-07-20); OPEN_ISSUES (embedded-apiKey → Resolved; new: non-revocability,
+    ephemeral secret, app-endpoint dependency).
+- **Gate** — `pnpm lint && typecheck && test && build` + `format:check` all
+  green offline. This phase is fully offline-testable; no live services needed.
+
+## Previous phase
+
 **v0.2 Phase 4 — GitHub Action mode: DONE (offline gate green)** on branch
 `v2-4-action-mode` (branched from up-to-date main; NOT merged, NOT pushed —
-Omri's call). Phases 1–3 (`v2-1-provenance`, `v2-2-repair-loop`,
-`v2-3-triage-retrieval`) are still unmerged too. Plan:
+Omri's call). Plan:
 `.a5c/runs/01KXXPDF1Y7TMPE4J22S3GNN6K/artifacts/phase-4-plan.md` (approved with
 owner decisions: CI auto-proceeds patchable→patch with PR review as the human
 gate — no auto-merge; live round-trip in scope now that credit is restored).
@@ -216,10 +263,15 @@ using a source-build workflow variant on the scratch repo (checkout this branch
    was added only for the test.
 
 Then: review + merge the stack `v2-1-provenance` → `v2-2-repair-loop` →
-`v2-3-triage-retrieval` → `v2-4-action-mode` in order. Also still pending from
-Phase 3: re-run the live triage eval (retrieval fixtures) for ≥90% + injection
-gate. Release-note reminder: older API 400s a newer widget that sends
-sourceHint (see OPEN_ISSUES 2026-07-19).
+`v2-3-triage-retrieval` → `v2-4-action-mode` → `v2-5-token-exchange` in order.
+Also still pending from Phase 3: re-run the live triage eval (retrieval
+fixtures) for ≥90% + injection gate. Release-note reminder: older API 400s a
+newer widget that sends sourceHint (see OPEN_ISSUES 2026-07-19).
+
+Phase 5 is offline-complete and needs no live run of its own; it merges cleanly
+onto the stack. When public-facing token exchange ships, set an explicit
+`tokenExchange.signingSecret` in any multi-instance deployment (the ephemeral
+default is dev-only — see OPEN_ISSUES 2026-07-20).
 
 ---
 

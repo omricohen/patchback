@@ -1,6 +1,10 @@
-import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
+import { createHash } from 'node:crypto';
 
 import { isTrustTier, type TrustTier } from '@patchback/types';
+
+import { canonicalJson, constantTimeHexEqual, hmacHex } from './hmac.js';
+
+export { canonicalJson } from './hmac.js';
 
 /**
  * The signed marker that binds a patchback-created GitHub issue to the trust
@@ -79,29 +83,6 @@ const MARKER_OPEN = '<!-- patchback:v1';
 const MARKER_RE =
   /<!--\s*patchback:v1\s*\n\s*payload=([A-Za-z0-9_-]+)\s*\n\s*sig=([0-9a-f]{64})\s*\n\s*-->/;
 
-/**
- * Deterministic JSON with lexicographically sorted keys, so the bytes the HMAC
- * covers are stable regardless of object construction order. The payload is a
- * flat object of primitives, but the serializer recurses defensively.
- */
-export function canonicalJson(value: unknown): string {
-  return JSON.stringify(sortDeep(value));
-}
-
-function sortDeep(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(sortDeep);
-  }
-  if (value !== null && typeof value === 'object') {
-    const out: Record<string, unknown> = {};
-    for (const key of Object.keys(value as Record<string, unknown>).sort()) {
-      out[key] = sortDeep((value as Record<string, unknown>)[key]);
-    }
-    return out;
-  }
-  return value;
-}
-
 /** SHA-256 (hex) of the canonical feedback text (trimmed). */
 export function hashFeedbackContent(feedbackText: string): string {
   return createHash('sha256')
@@ -114,22 +95,6 @@ function normalizeFeedback(text: string): string {
   // ingest signs matches the section the Action re-extracts from the rendered
   // body (which the verifier trims identically).
   return text.replace(/\r\n/g, '\n').trim();
-}
-
-function hmacHex(secret: string, canonical: string): string {
-  return createHmac('sha256', secret).update(canonical).digest('hex');
-}
-
-/**
- * Constant-time hex comparison: hash both sides then `timingSafeEqual`, so the
- * comparison time is independent of where (or whether) the strings differ and
- * no length game is possible. Identical to the webhook verifier's approach.
- */
-function constantTimeHexEqual(a: string, b: string): boolean {
-  return timingSafeEqual(
-    createHash('sha256').update(a.toLowerCase()).digest(),
-    createHash('sha256').update(b.toLowerCase()).digest(),
-  );
 }
 
 /** Sign a payload → the marker comment block (the trailing `\n` is caller's). */

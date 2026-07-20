@@ -7,6 +7,11 @@ import {
   type TrustTier,
 } from '@patchback/types';
 
+import {
+  BROWSER_TOKEN_PREFIX,
+  DEFAULT_MAX_TOKEN_TTL_MS,
+  DEFAULT_TOKEN_TTL_MS,
+} from './browser-token.js';
 import type { PatchPipeline } from './pipeline.js';
 import { createDefaultPatchPipeline } from './pipeline.js';
 import type { TaskQueue } from './queue/queue.js';
@@ -103,6 +108,33 @@ export interface ApiConfig {
     freshnessWindowMs?: number;
   };
   /**
+   * Per-user token exchange for PUBLIC-FACING apps. DEFAULT-OFF: when this
+   * field is ABSENT, `POST /tokens/exchange` is NOT registered and a `pbt_`
+   * bearer resolves as an unknown read-token candidate exactly as any unknown
+   * token does today — byte-identical to a deployment without this phase.
+   *
+   * When SET, the embedding app's BACKEND may exchange its server-held API key
+   * for a short-lived, tier-ceilinged browser token (see
+   * `packages/api/src/browser-token.ts`). The exchange endpoint is
+   * server-to-server only: it requires the parent key, rejects browser-origin
+   * requests, and is never CORS-exposed. A minted token can never exceed its
+   * parent key's tier and its expiry is enforced on every request.
+   */
+  tokenExchange?: {
+    /**
+     * Symmetric HMAC signing secret (≥16 chars). When OMITTED, the server
+     * generates an ephemeral per-process secret at startup and logs a warning:
+     * minted tokens will not survive a restart, and every instance in a
+     * multi-instance deployment will reject the others' tokens — set an
+     * explicit secret for production / horizontal scaling.
+     */
+    signingSecret?: string;
+    /** Default token lifetime in ms. Defaults to 15 min. */
+    defaultTtlMs?: number;
+    /** Hard maximum lifetime in ms (a requested TTL is clamped down). Defaults to 60 min. */
+    maxTtlMs?: number;
+  };
+  /**
    * OPTIONAL repo-aware triage stage 2. When set, borderline stage-1 results
    * are re-classified against a deterministic fixed-string probe of a repo
    * working copy (paths + counts only). Only wired where a real on-disk
@@ -191,6 +223,47 @@ export function validateConfig(config: ApiConfig): void {
       throw new ConfigError(
         'issueEmitter.signingSecret must be a string of at least 16 characters',
       );
+    }
+  }
+  if (config.tokenExchange !== undefined) {
+    const te = config.tokenExchange;
+    if (
+      te.signingSecret !== undefined &&
+      (typeof te.signingSecret !== 'string' || te.signingSecret.length < 16)
+    ) {
+      throw new ConfigError(
+        'tokenExchange.signingSecret must be a string of at least 16 ' +
+          'characters when set (omit it to auto-generate an ephemeral secret)',
+      );
+    }
+    const maxTtlMs = te.maxTtlMs ?? DEFAULT_MAX_TOKEN_TTL_MS;
+    const defaultTtlMs =
+      te.defaultTtlMs ?? Math.min(DEFAULT_TOKEN_TTL_MS, maxTtlMs);
+    if (te.maxTtlMs !== undefined && !(te.maxTtlMs > 0)) {
+      throw new ConfigError('tokenExchange.maxTtlMs must be a positive number');
+    }
+    if (te.defaultTtlMs !== undefined && !(te.defaultTtlMs > 0)) {
+      throw new ConfigError(
+        'tokenExchange.defaultTtlMs must be a positive number',
+      );
+    }
+    if (defaultTtlMs > maxTtlMs) {
+      throw new ConfigError(
+        'tokenExchange.defaultTtlMs must be <= tokenExchange.maxTtlMs',
+      );
+    }
+    // A configured API key must never collide with the reserved token prefix,
+    // or it could be mis-routed. (API-key match runs first, so this is
+    // defense-in-depth.) Guarded only when tokenExchange is on, to keep an
+    // absent-config deployment byte-identical.
+    for (const [index, entry] of (config.apiKeys ?? []).entries()) {
+      if (entry.key.startsWith(BROWSER_TOKEN_PREFIX)) {
+        const label = entry.label ?? `#${index}`;
+        throw new ConfigError(
+          `apiKeys[${label}]: an API key must not start with the reserved ` +
+            `browser-token prefix ${JSON.stringify(BROWSER_TOKEN_PREFIX)}`,
+        );
+      }
     }
   }
   // The issue-emitting ingest runs no pipeline (it emits an issue for a

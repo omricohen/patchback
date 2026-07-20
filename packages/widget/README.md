@@ -30,6 +30,29 @@ Script-tag build: `dist/patchback-widget.iife.js` exposes
   field. Tiers are assigned exclusively server-side; a body-supplied tier
   is a 400.
 
+### Public-facing apps: use `getToken` instead of a raw key
+
+For a **multi-user or public-facing** app where a raw key in page source is
+uncomfortable, pass a `getToken` provider instead of `apiKey` (the two are
+mutually exclusive — passing both throws at init). It returns a **short-lived,
+tier-scoped per-user token** minted by **your own backend** (which holds the
+key and exchanges it at Patchback's server-only `POST /tokens/exchange` — the
+widget never calls that endpoint and never sees your key):
+
+```ts
+createPatchbackWidget({
+  apiUrl: 'https://patchback.your.host',
+  getToken: () => fetch('/patchback-token').then((r) => r.json()),
+});
+```
+
+The widget caches the token and re-fetches it before it expires. A token in
+page source is safe to expose: it can never exceed the parent key's tier, its
+expiry is enforced on every request server-side, and an expired one falls back
+to `outsider` (data-only). See the root README and the
+[SDK README](../sdk/README.md) for the ~15-line backend endpoint and the full
+diagram.
+
 ## What leaves the page (capture defaults)
 
 With **zero config**, exactly this is sent on submit: the user's typed
@@ -169,6 +192,7 @@ never appear in URLs.
 Canonical job states map to labels in `status-map.ts`
 (compile-time-exhaustive). The reply box renders only while a job is at
 `feedback.needs_clarification`; the "Start patch" button renders only
-with an apiKey + `feedback.triaged` + `patchable` — presentation only,
+with an app credential (`apiKey` or `getToken`) + `feedback.triaged` +
+`patchable` — presentation only,
 the server re-enforces every gate. There is no auto-merge anywhere:
 `pr.reviewed` and beyond only happen through human action on GitHub.

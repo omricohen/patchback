@@ -42,7 +42,15 @@ afterEach(async () => {
   openApps.length = 0;
 });
 
-async function makeWorld(script: ScriptedTriage[]): Promise<World> {
+const EXCHANGE_SECRET = 'sdk-exchange-signing-secret-0123456789';
+
+async function makeWorld(
+  script: ScriptedTriage[],
+  extra: {
+    tokenExchange?: { signingSecret?: string; defaultTtlMs?: number };
+    now?: () => Date;
+  } = {},
+): Promise<World> {
   const store = new MemoryStore();
   const queue = new MemoryQueue();
   const { callModel } = createScriptedModelCaller(script);
@@ -56,6 +64,7 @@ async function makeWorld(script: ScriptedTriage[]): Promise<World> {
       { key: OWNER_KEY, tier: 'owner' as const },
       { key: INSIDER_KEY, tier: 'insider' as const },
     ],
+    ...extra,
   };
   const app = buildServer(config);
   createWorkers(config);
@@ -190,7 +199,7 @@ describe('SDK ↔ API contract', () => {
     const submitted = await keyless.submitFeedback({ message: 'outsider' });
     await world.queue.onIdle();
     await expect(keyless.startJob(submitted.jobId)).rejects.toThrow(
-      /requires an apiKey/,
+      /startJob requires/,
     );
 
     // Even an OWNER key cannot start a job on outsider-submitted feedback —
@@ -308,6 +317,75 @@ describe('SDK ↔ API contract', () => {
     expect(raw.status).toBe(400);
     const body = (await raw.json()) as { error: { code: string } };
     expect(body.error.code).toBe('validation');
+  });
+
+  it('drives the per-user token flow end-to-end: exchange → getToken → submit/start, with refresh', async () => {
+    // A shared clock so the token's server-stamped expiry and the SDK's
+    // refresh check agree deterministically.
+    let clockMs = Date.parse('2026-07-20T12:00:00.000Z');
+    const world = await makeWorld([{ classification: 'patchable' }], {
+      tokenExchange: { signingSecret: EXCHANGE_SECRET, defaultTtlMs: 60_000 },
+      now: () => new Date(clockMs),
+    });
+
+    // A fake "app backend" that holds the server key and calls Patchback's
+    // exchange endpoint — exactly what the widget's getToken points at. The
+    // browser (this SDK) never sees the key.
+    let exchanges = 0;
+    const appBackendGetToken = async (): Promise<{
+      token: string;
+      expiresAt: string;
+    }> => {
+      exchanges += 1;
+      const res = await fetch(`${world.baseUrl}/tokens/exchange`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${OWNER_KEY}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ tier: 'insider' }),
+      });
+      expect(res.status).toBe(201);
+      return (await res.json()) as { token: string; expiresAt: string };
+    };
+
+    const client = createPatchbackClient({
+      baseUrl: world.baseUrl,
+      getToken: appBackendGetToken,
+      now: () => clockMs,
+    });
+
+    const submitted = await client.submitFeedback({
+      message: 'Change the button label from "Expot" to "Export"',
+    });
+    expect(exchanges).toBe(1);
+    await world.queue.onIdle();
+
+    // The minted (insider) token authenticated the submit → stored at insider.
+    const stored = await world.store.getFeedback(submitted.id);
+    expect(stored?.trustTier).toBe('insider');
+
+    // An insider token can start a patch job on a patchable insider item.
+    const started = await client.startJob(submitted.jobId);
+    expect(started.state).toBe('patch.queued');
+    // Still the same cached token — no re-exchange yet.
+    expect(exchanges).toBe(1);
+
+    // Advance the clock past expiry: the next call re-invokes getToken.
+    clockMs += 61_000;
+    await client.getFeedback(submitted.id, { useApiKey: true });
+    expect(exchanges).toBe(2);
+  });
+
+  it('rejects configuring both apiKey and getToken', async () => {
+    const world = await makeWorld([{ classification: 'patchable' }]);
+    expect(() =>
+      createPatchbackClient({
+        baseUrl: world.baseUrl,
+        apiKey: OWNER_KEY,
+        getToken: async () => ({ token: 'pbt_x', expiresAt: '' }),
+      }),
+    ).toThrow(/mutually exclusive|either/);
   });
 
   it('fails closed to code "unknown" on malformed error bodies', async () => {

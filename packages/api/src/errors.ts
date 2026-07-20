@@ -11,6 +11,8 @@ export const API_ERROR_CODES = [
   'unauthorized',
   'not_found',
   'tier_forbidden',
+  'tier_ceiling',
+  'server_only',
   'triage_gate',
   'invalid_state',
   'conflict',

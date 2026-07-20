@@ -34,6 +34,16 @@ export function minTrustTier(tiers: readonly TrustTier[]): TrustTier {
 }
 
 /**
+ * The tier-ceiling rule for token minting: is `requested` no more trusted than
+ * `ceiling`? A minted browser token can never exceed its parent key's tier, so
+ * the exchange endpoint mints iff `tierAtMost(requested, parentTier)`. Tier
+ * ordering lives in exactly one place (this file's `TIER_RANK`).
+ */
+export function tierAtMost(requested: TrustTier, ceiling: TrustTier): boolean {
+  return TIER_RANK[requested] <= TIER_RANK[ceiling];
+}
+
+/**
  * Runtime tier validation at a storage/config boundary. Returns the tier
  * when valid; throws {@link StoreIntegrityError} otherwise (fail closed —
  * never coerce an unknown value toward an eligible tier).
