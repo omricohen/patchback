@@ -1,13 +1,65 @@
 # STATE — where we left off
 
-_Last updated: 2026-07-20 (v0.2 Phase 5 session)_
+_Last updated: 2026-07-20 (v0.2 Phase 6 session)_
 
 ## Current phase
 
+**v0.2 Phase 6 — Feedback outcome view (non-technical PR view + preview link):
+DONE (offline gate green)** on branch `v2-6-outcome-view` (branched from
+up-to-date main; NOT merged, NOT pushed — Omri's call). Phases 1–5
+(`v2-1-provenance`, `v2-2-repair-loop`, `v2-3-triage-retrieval`,
+`v2-4-action-mode`, `v2-5-token-exchange`) are still unmerged too. Plan:
+`.a5c/runs/01KXXPDF1Y7TMPE4J22S3GNN6K/artifacts/phase-6-plan.md` (approved with
+owner decisions: hosted previews IN scope via a payload-only `deployment_status`
+webhook that preserves the no-GitHubClient boundary; preview privacy = surface,
+don't gate — the host owns reachability).
+
+### What's done (Phase 6)
+
+- **Two additive, absent-safe `Job` fields** (`packages/types/src/job.ts`):
+  `userSummary?` (plain-language, non-technical change summary — display-only,
+  never fed back into any pipeline) and `previewUrl?` (the host's OWN preview
+  URL, surfaced not provisioned). Byte-identical when absent (pinned across
+  types/api/sdk/widget + the Drizzle row mapper). No new job state. New shared
+  `isSafeHttpUrl()` validator (http(s) only, ≤2000 chars).
+- **userSummary from the SAME `execute()` call** — `buildPrompt()` appends an
+  unconditional "Final step" asking for one `<<<PATCHBACK_USER_SUMMARY>>> …`
+  line; `extractUserSummary()`/`stripUserSummaryLine()` (`result.ts`) parse it
+  best-effort (absent/blank ⇒ undefined, never fabricated, never fails the job)
+  and keep the sentinel out of the technical PR body. Threaded
+  `AgentSummary → PatchPipelineResult → Job` spread in the `pr.opened` write.
+- **`getPreviewDeploymentUrl(headSha)`** (`@patchback/github`, READ-ONLY,
+  GET-only) — newest successful NON-production `environment_url` off the
+  Deployments API; pending/failed/all-prod/none ⇒ undefined; bad scheme
+  rejected. Dev pr-poller populates `previewUrl` (idempotent, error-isolated,
+  can't clobber the merge-tail). Hosted: inbound `deployment_status` webhook,
+  PAYLOAD-ONLY (no GitHubClient, spy-asserted zero calls), correlated by
+  `deployment.ref === job.branchName` via new `store.getJobByBranchName`.
+- **Action mode (one-shot)** — the outcome comment folds in `userSummary`
+  immediately and states honestly that the preview link appears on the PR once
+  the provider's deploy finishes (no fabricated URL, no waiting).
+- **Status + SDK + widget** — `GET /jobs/:id/status` serializes both behind the
+  UNCHANGED `canReadFeedback` gate (re-validates the URL); SDK
+  `JobStatusResponse` exposes both; the widget renders `userSummary` as a
+  text-node AI note (HTML-injection-proof) and a hardened, scheme-validated
+  "Preview this change" anchor — neither when absent.
+- **Storage** — jobs are columnar in Drizzle, so `user_summary` + `preview_url`
+  nullable columns + `jobs_branch_name_idx` were added (migration
+  `0001_closed_talisman.sql`); MemoryStore needed no change.
+- **Permission + docs** — `Deployments: read` (optional, read-only) documented
+  in the github README; `deployments: read` added to the Action workflow;
+  `github-probe` warns non-fatally when missing. SPEC preview-privacy note;
+  README outcome-view subsection; widget/SDK READMEs; DECISIONS (2026-07-20);
+  OPEN_ISSUES (deployment permission, provider naming variance, shared-token
+  reachability, hosted-webhook dependency).
+- **Gate** — `pnpm lint && typecheck && test && build` + `format:check` all
+  green offline. Live provider check optional/not required.
+
+## Previous phase
+
 **v0.2 Phase 5 — Per-user token exchange: DONE (offline gate green)** on branch
 `v2-5-token-exchange` (branched from up-to-date main; NOT merged, NOT pushed —
-Omri's call). Phases 1–4 (`v2-1-provenance`, `v2-2-repair-loop`,
-`v2-3-triage-retrieval`, `v2-4-action-mode`) are still unmerged too. Plan:
+Omri's call). Plan:
 `.a5c/runs/01KXXPDF1Y7TMPE4J22S3GNN6K/artifacts/phase-5-plan.md` (approved with
 owner decisions: stateless signed HMAC tokens; expired/invalid ⇒ fail closed to
 outsider, not 401; additive/opt-in via `ApiConfig.tokenExchange`).
@@ -50,7 +102,7 @@ getToken` (mutually exclusive with `apiKey`, validated): fetch a short-lived
 - **Gate** — `pnpm lint && typecheck && test && build` + `format:check` all
   green offline. This phase is fully offline-testable; no live services needed.
 
-## Previous phase
+## Earlier phases
 
 **v0.2 Phase 4 — GitHub Action mode: DONE (offline gate green)** on branch
 `v2-4-action-mode` (branched from up-to-date main; NOT merged, NOT pushed —

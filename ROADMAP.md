@@ -61,6 +61,20 @@ that can withstand adversarial submission volume. Semantic/embedding retrieval
 (vs today's literal fixed-string) is a further extension. Both explicitly out
 of scope until hosted mode happens.
 
+## Patchback-provisioned preview environments
+
+v0.2's outcome view **surfaces** a preview URL — it relays the URL the host's
+own preview provider (Vercel/Netlify/Cloudflare/…) already publishes to the
+GitHub Deployments API via the read-only `getPreviewDeploymentUrl` (dev poller)
+and the payload-only `deployment_status` webhook (hosted). Patchback never
+provisions a preview environment. Actually spinning up an isolated preview
+deploy of a patch branch (so hosts WITHOUT their own preview CI still get a
+link) is a separate, heavier feature — it needs a build/host integration, a
+cost/quota model, and its own privacy/expiry story — and is explicitly out of
+scope until (and if) it earns its keep. A related smaller follow-up: an
+opt-in hosted background preview poller (mirroring the dev poller) if inbound
+`deployment_status` event coverage ever proves insufficient for hosted mode.
+
 ## Outsider feedback clustering
 
 Outsider-tier feedback is stored but never becomes agent input. Clustering
