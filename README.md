@@ -105,6 +105,28 @@ Next.js (SWC and Turbopack), and a plain babel plugin are supported;
 production builds stamp nothing by default. Non-JSX apps can write the
 attribute by hand — it is a documented public contract.
 
+### Optional: GitHub Action mode (no long-running process)
+
+For a team-shape deployment, run the triage + patch pipeline **inside GitHub
+Actions** on your repo instead of a local `patchback dev` process. A thin
+**ingest** (the API in `issueEmitter` mode) authenticates the submitter, assigns
+the trust tier **server-side**, signs an **HMAC marker** binding the feedback
+content + tier + a nonce + the repo, and opens a labeled issue. A workflow fires
+on that issue and runs `patchback ci`, which **verifies the marker** and — only
+on a valid one — drives the item through the same triage → guarded brief → patch
+pipeline, opening a PR. **It never merges; PR review is the human gate.**
+
+```sh
+npx patchback init --github-action
+```
+
+This scaffolds a least-privilege `.github/workflows/patchback.yml`
+(`contents`/`issues`/`pull-requests: write` only) and prints the `gh secret set`
+steps for `ANTHROPIC_API_KEY` and `PATCHBACK_SIGNING_SECRET` (secrets are never
+written to a file). The `patchback` label is only a trigger filter — the signed
+marker is the sole authorization, so a mislabeled or forged issue neutral-exits
+with no agent run. See [`action/`](action) for details and the trust model.
+
 ## Example apps
 
 - [`examples/nextjs-demo`](examples/nextjs-demo) — a fake internal ops

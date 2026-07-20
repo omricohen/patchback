@@ -36,7 +36,7 @@ gate — no auto-merge; live round-trip in scope now that credit is restored).
   scaffolds the least-privilege `.github/workflows/patchback.yml`
   (contents/issues/pull-requests: write only, label `if:` filter,
   concurrency, timeout), mints a signing secret printed ONCE with `gh secret
-  set` steps, writes NO secret files.
+set` steps, writes NO secret files.
 - **`action/`** (new) — composite `action.yml` (`npx patchback@<pin> ci`, no
   committed JS bundle) + README (trust model, permissions, secret custody).
 - **`@patchback/github`** — added `createIssueComment` (status-back only; no
