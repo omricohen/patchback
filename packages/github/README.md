@@ -19,14 +19,23 @@ Create a [fine-grained personal access token](https://github.com/settings/person
 restricted to **only the repository Patchback operates on**, with these
 repository permissions:
 
-| Permission        | Access         | Used for                                       |
-| ----------------- | -------------- | ---------------------------------------------- |
-| **Contents**      | Read and write | Create branches, commit files (git data API)   |
-| **Issues**        | Read and write | Create the tracking issue for triaged feedback |
-| **Pull requests** | Read and write | Open PRs, read PR status                       |
-| **Metadata**      | Read           | Mandatory baseline for any fine-grained token  |
+| Permission        | Access          | Used for                                                                     |
+| ----------------- | --------------- | ---------------------------------------------------------------------------- |
+| **Contents**      | Read and write  | Create branches, commit files (git data API)                                 |
+| **Issues**        | Read and write  | Create the tracking issue for triaged feedback                               |
+| **Pull requests** | Read and write  | Open PRs, read PR status                                                     |
+| **Metadata**      | Read            | Mandatory baseline for any fine-grained token                                |
+| **Deployments**   | Read (optional) | Surface the host's OWN preview URL in the widget (`getPreviewDeploymentUrl`) |
 
 Nothing else. No account-level scopes, no admin, no workflows.
+
+`Deployments: read` is **optional and read-only**: it lets `getPreviewDeploymentUrl`
+relay the preview URL your existing deploy provider (Vercel/Netlify/Cloudflare/…)
+already publishes to the GitHub Deployments API, so the feedback submitter gets a
+"Preview this change" link. Patchback never creates or mutates a deployment — it
+only reads `environment_url` off the latest **non-production** deployment status.
+Without this permission, previews simply never appear (graceful absence); every
+other feature works unchanged.
 
 ## Usage
 
