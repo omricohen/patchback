@@ -190,8 +190,15 @@ in full, including the @babel/core dependency).
 
 **Phase 4 live round-trip (orchestrator/Omri):** credit is restored and
 `ANTHROPIC_API_KEY` is set on `omricohen/testingPatchBack`, so the live
-issue→CI→PR round-trip is in scope but was NOT run in this session. To drive it
-safely without ever printing secrets:
+issue→CI→PR round-trip is in scope but was NOT run in this session
+(`liveAction = not-run-needs-orchestrator`). **Hard prerequisite:** the
+composite action runs `npx --yes patchback@0.0.1 ci`, and `patchback` is not
+yet published to npm (see the 2026-07-15 "npx requires publish" issue), so a
+runner cannot resolve it. Clear this first by EITHER publishing the CLI OR
+using a source-build workflow variant on the scratch repo (checkout this branch
+
+- `pnpm install && pnpm build` + `node packages/cli/dist/index.js ci`) instead
+  of the `npx` step. Then, without ever printing secrets:
 
 1. `set -a; . ./.env; set +a` in a subshell to load `GITHUB_TOKEN` +
    `ANTHROPIC_API_KEY` (never echo them).
