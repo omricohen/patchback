@@ -135,4 +135,79 @@ describe('PR status poller (dev-mode webhook substitute)', () => {
     expect((await store.getJob(job.id))?.state).toBe('pr.opened');
     expect(lines.join('\n')).toContain('poll failed');
   });
+
+  it('surfaces a preview URL onto an open PR job, once and idempotently', async () => {
+    const store = new MemoryStore();
+    const job = await seedPrOpenedJob(store);
+    const github = createFakeGitHubClient();
+    let previewCalls = 0;
+    github.getPreviewDeploymentUrl = async () => {
+      previewCalls += 1;
+      return 'https://preview.example.com/pr/1';
+    };
+    const poller = startPrPoller({
+      store,
+      githubClient: github,
+      jobIds: () => [job.id],
+      logger: createDevLogger({ sink: () => {} }),
+      intervalMs: 60_000,
+    });
+    await poller.tick();
+    expect((await store.getJob(job.id))?.previewUrl).toBe(
+      'https://preview.example.com/pr/1',
+    );
+    // Second tick must NOT re-query deployments (previewUrl already set).
+    await poller.tick();
+    poller.stop();
+    expect(previewCalls).toBe(1);
+    // Still open — surfacing a preview never advances state.
+    expect((await store.getJob(job.id))?.state).toBe('pr.opened');
+  });
+
+  it('drops a non-http(s) preview URL and keeps polling', async () => {
+    const store = new MemoryStore();
+    const job = await seedPrOpenedJob(store);
+    const github = createFakeGitHubClient();
+    github.getPreviewDeploymentUrl = async () => 'javascript:alert(1)';
+    const poller = startPrPoller({
+      store,
+      githubClient: github,
+      jobIds: () => [job.id],
+      logger: createDevLogger({ sink: () => {} }),
+      intervalMs: 60_000,
+    });
+    await poller.tick();
+    poller.stop();
+    expect((await store.getJob(job.id))?.previewUrl).toBeUndefined();
+  });
+
+  it('isolates preview-poll errors from the merge tail', async () => {
+    const store = new MemoryStore();
+    const job = await seedPrOpenedJob(store);
+    const github = createFakeGitHubClient();
+    github.getPreviewDeploymentUrl = async () => {
+      throw new Error('deployments rate limited');
+    };
+    github.getPullRequestStatus = async (pullNumber) => ({
+      number: pullNumber,
+      state: 'merged',
+      draft: false,
+      merged: true,
+      headSha: 'c'.repeat(40),
+      url: `https://github.com/acme/demo/pull/${pullNumber}`,
+    });
+    const lines: string[] = [];
+    const poller = startPrPoller({
+      store,
+      githubClient: github,
+      jobIds: () => [job.id],
+      logger: createDevLogger({ sink: (line) => lines.push(line) }),
+      intervalMs: 60_000,
+    });
+    await poller.tick();
+    poller.stop();
+    // The merge tail still completes despite the preview error.
+    expect((await store.getJob(job.id))?.state).toBe('feedback.closed');
+    expect(lines.join('\n')).toContain('Preview deployment poll failed');
+  });
 });

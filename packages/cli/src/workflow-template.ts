@@ -7,7 +7,8 @@
  *   coarse trigger filter and CI-minutes saver ONLY — authorization is the
  *   HMAC marker the Action verifies, never the label);
  * - grants exactly `contents: write` + `issues: write` +
- *   `pull-requests: write` at the workflow level, which drops everything else
+ *   `pull-requests: write` (plus read-only `deployments: read` to surface the
+ *   host's own preview URL) at the workflow level, which drops everything else
  *   to `none`;
  * - serializes per-issue via `concurrency` and bounds a stuck run with
  *   `timeout-minutes`.
@@ -56,6 +57,7 @@ permissions:
   contents: write # create the patch branch + commit (via the git data API)
   issues: write # comment the triage/patch outcome on the triggering issue
   pull-requests: write # open the PR (never merge)
+  deployments: read # read-only: surface your preview provider's URL (optional)
 
 # Serialize per issue so an opened+labeled double-fire (or a replay) cannot run
 # twice at once; combined with the deterministic branch name this blocks a

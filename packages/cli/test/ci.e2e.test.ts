@@ -90,6 +90,37 @@ describe('patchback ci — valid signed marker (auto-proceed to a PR-ready branc
     expect(github.issues).toHaveLength(0);
     expect(github.callLog).toEqual(['createIssueComment']);
   });
+
+  it('folds the plain-language userSummary into the outcome comment when present', async () => {
+    const github = createFakeGitHubClient({ owner: 'acme', repo: 'webapp' });
+    const { callModel } = createScriptedModelCaller([
+      { classification: 'patchable' },
+    ]);
+    const pipeline = createFakePipeline({
+      ok: true,
+      branch: 'patchback/job-fb-ci-000001',
+      prNumber: 777,
+      prUrl: 'https://github.com/acme/webapp/pull/777',
+      userSummary: 'The export button now reads Export instead of Exprot.',
+      repairAttempts: 0,
+    });
+    const result = await runCi({
+      config: CONFIG,
+      repo: REPO,
+      event: signedEvent(),
+      secrets: { signingSecret: SIGNING_SECRET },
+      seams: { callModel, githubClient: github, pipeline },
+      now,
+    });
+    expect(result.outcome).toBe('patched');
+    const body = github.comments[0]?.body ?? '';
+    expect(body).toContain(
+      '**What changed:** The export button now reads Export instead of Exprot.',
+    );
+    // Honest preview expectation, no fabricated URL.
+    expect(body).toContain('preview link will appear on the pull request');
+    expect(body).toContain('never merges');
+  });
 });
 
 describe('patchback ci — the security gate (neutral exit, ZERO downstream calls)', () => {

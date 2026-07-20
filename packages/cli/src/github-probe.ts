@@ -128,6 +128,34 @@ export async function probeGitHubToken(
         'in the repository settings.',
     );
   }
+
+  // Best-effort, non-fatal: probe read access to the Deployments API. Without
+  // the OPTIONAL "Deployments (read)" permission, preview links simply never
+  // appear (graceful absence) — everything else works. A 403 here strongly
+  // indicates the permission is missing; 404/other are treated as "no signal".
+  try {
+    const deployments = await fetchImpl(
+      `${baseUrl}/repos/${owner}/${repo}/deployments?per_page=1`,
+      {
+        headers: {
+          accept: 'application/vnd.github+json',
+          authorization: `Bearer ${token}`,
+          'user-agent': 'patchback-cli',
+        },
+      },
+    );
+    if (deployments.status === 403) {
+      warnings.push(
+        `The token cannot read deployments for ${owner}/${repo} — the ` +
+          'optional "Deployments (read)" permission is not granted, so ' +
+          'Patchback will not surface preview links in the widget. Everything ' +
+          'else works; grant Deployments (read) if you want preview links.',
+      );
+    }
+  } catch {
+    // Offline or transient — the token probe above already reports offline.
+  }
+
   return { ok: true, warnings };
 }
 
