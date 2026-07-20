@@ -160,6 +160,41 @@ export function runStoreConformance(
       expect(await store.getJobByPrNumber(999999999)).toBeUndefined();
     });
 
+    it('finds a job by branch name and round-trips userSummary + previewUrl', async () => {
+      const store = await makeStore();
+      const item = makeItem();
+      await store.createFeedback(item, hashReadToken(generateReadToken()));
+      const branchName = `patchback/job-${uid('branch')}`;
+      let job = makeJob(item.id, { branchName });
+      await store.createJob(job);
+      // Walk to pr.opened and attach the outcome fields.
+      for (const state of [
+        'feedback.triaged',
+        'issue.created',
+        'patch.queued',
+        'patch.running',
+        'patch.generated',
+        'pr.opened',
+      ] as const) {
+        job = transitionJob(job, state);
+      }
+      job = {
+        ...job,
+        prNumber: 4242,
+        userSummary: 'Made the login button say Sign in.',
+        previewUrl: 'https://preview.example.com/pr/42',
+      };
+      expect(await store.updateJob(job, INITIAL_JOB_STATE)).toBe(true);
+
+      const found = await store.getJobByBranchName(branchName);
+      expect(found?.id).toBe(job.id);
+      expect(found?.userSummary).toBe('Made the login button say Sign in.');
+      expect(found?.previewUrl).toBe('https://preview.example.com/pr/42');
+      expect(
+        await store.getJobByBranchName('patchback/job-nope'),
+      ).toBeUndefined();
+    });
+
     it('updateJob is compare-and-swap: stale expected state writes nothing', async () => {
       const store = await makeStore();
       const item = makeItem();

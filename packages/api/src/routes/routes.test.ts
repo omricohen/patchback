@@ -1,3 +1,5 @@
+import { createHmac } from 'node:crypto';
+
 import type { FastifyInstance } from 'fastify';
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -326,6 +328,65 @@ describe('read-token enforcement', () => {
     expect(allowed.json().state).toBe('feedback.triaged');
     expect(allowed.json().history).toHaveLength(1);
   });
+
+  it('GET /jobs/:id/status omits userSummary/previewUrl when absent (byte-identical)', async () => {
+    const { app, store } = makeApp();
+    const { job, readToken } = await seed(store, { tier: 'insider' });
+    const res = await app.inject({
+      method: 'GET',
+      url: `/jobs/${job.id}/status`,
+      headers: { authorization: `Bearer ${readToken}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect('userSummary' in body).toBe(false);
+    expect('previewUrl' in body).toBe(false);
+  });
+
+  it('GET /jobs/:id/status exposes userSummary + previewUrl to the read-token holder', async () => {
+    const { app, store } = makeApp();
+    const { job, readToken } = await seed(store, { tier: 'insider' });
+    const withOutcome = {
+      ...job,
+      userSummary: 'The button now reads Submit instead of Sumbit.',
+      previewUrl: 'https://preview.example.com/pr/7',
+    };
+    expect(await store.updateJob(withOutcome, 'feedback.triaged')).toBe(true);
+
+    const allowed = await app.inject({
+      method: 'GET',
+      url: `/jobs/${job.id}/status`,
+      headers: { authorization: `Bearer ${readToken}` },
+    });
+    expect(allowed.statusCode).toBe(200);
+    expect(allowed.json().userSummary).toBe(
+      'The button now reads Submit instead of Sumbit.',
+    );
+    expect(allowed.json().previewUrl).toBe('https://preview.example.com/pr/7');
+
+    // A non-holder is still denied (404), same boundary as today.
+    const denied = await app.inject({
+      method: 'GET',
+      url: `/jobs/${job.id}/status`,
+      headers: { authorization: `Bearer ${generateReadToken()}` },
+    });
+    expect(denied.statusCode).toBe(404);
+  });
+
+  it('GET /jobs/:id/status drops a previewUrl that is not a safe http(s) URL', async () => {
+    const { app, store } = makeApp();
+    const { job, readToken } = await seed(store, { tier: 'insider' });
+    // A corrupt/hostile stored value must never reach the client as an href.
+    const poisoned = { ...job, previewUrl: 'javascript:alert(1)' };
+    expect(await store.updateJob(poisoned, 'feedback.triaged')).toBe(true);
+    const res = await app.inject({
+      method: 'GET',
+      url: `/jobs/${job.id}/status`,
+      headers: { authorization: `Bearer ${readToken}` },
+    });
+    expect(res.statusCode).toBe(200);
+    expect('previewUrl' in res.json()).toBe(false);
+  });
 });
 
 describe('POST /jobs/:id/start gate matrix', () => {
@@ -575,5 +636,152 @@ describe('webhook route registration', () => {
       payload: { anything: true },
     });
     expect(response.statusCode).toBe(404);
+  });
+});
+
+describe('deployment_status webhook → previewUrl (payload-only, no GitHub call)', () => {
+  const WEBHOOK_SECRET = 'test-webhook-secret';
+
+  function signed(body: unknown): {
+    payload: string;
+    signature: string;
+  } {
+    const payload = JSON.stringify(body);
+    const signature = `sha256=${createHmac('sha256', WEBHOOK_SECRET)
+      .update(payload)
+      .digest('hex')}`;
+    return { payload, signature };
+  }
+
+  async function seedPrOpenedJob(store: MemoryStore, branchName: string) {
+    const at = new Date().toISOString();
+    const item: FeedbackItem = {
+      id: generateId(),
+      message: 'x',
+      trustTier: 'insider',
+      createdAt: at,
+      updatedAt: at,
+    };
+    await store.createFeedback(item, hashReadToken(generateReadToken()));
+    let job: Job = {
+      id: generateId(),
+      feedbackId: item.id,
+      state: INITIAL_JOB_STATE,
+      history: [],
+      branchName,
+      createdAt: at,
+      updatedAt: at,
+    };
+    await store.createJob(job);
+    for (const state of [
+      'feedback.triaged',
+      'issue.created',
+      'patch.queued',
+      'patch.running',
+      'patch.generated',
+      'pr.opened',
+    ] as const) {
+      const next = transitionJob(job, state);
+      await store.updateJob(next, job.state);
+      job = next;
+    }
+    return job;
+  }
+
+  function deploymentEvent(overrides: {
+    ref: string;
+    state?: string;
+    environment?: string;
+    environmentUrl?: string;
+  }) {
+    return {
+      repository: { full_name: 'acme/demo' },
+      deployment: {
+        ref: overrides.ref,
+        environment: overrides.environment ?? 'preview',
+      },
+      deployment_status: {
+        state: overrides.state ?? 'success',
+        environment_url:
+          overrides.environmentUrl ?? 'https://preview.example.com/pr/1',
+      },
+    };
+  }
+
+  async function post(app: TestApp['app'], event: unknown) {
+    const { payload, signature } = signed(event);
+    return app.inject({
+      method: 'POST',
+      url: '/webhooks/github',
+      headers: {
+        'content-type': 'application/json',
+        'x-github-event': 'deployment_status',
+        'x-hub-signature-256': signature,
+      },
+      payload,
+    });
+  }
+
+  it('sets previewUrl from the payload, correlating by branch, with ZERO GitHub calls', async () => {
+    const { app, store, github } = makeApp({ webhookSecret: WEBHOOK_SECRET });
+    const branch = 'patchback/job-deploy-1';
+    const job = await seedPrOpenedJob(store, branch);
+
+    const res = await post(
+      app,
+      deploymentEvent({
+        ref: branch,
+        environmentUrl: 'https://preview.example.com/pr/1',
+      }),
+    );
+    expect(res.statusCode).toBe(200);
+    expect(res.json().handled).toBe(true);
+
+    const updated = await store.getJob(job.id);
+    expect(updated?.previewUrl).toBe('https://preview.example.com/pr/1');
+    // The no-client boundary: the webhook never touches the GitHub client.
+    expect(github.callLog).toEqual([]);
+  });
+
+  it('rejects a non-http(s) environment_url', async () => {
+    const { app, store } = makeApp({ webhookSecret: WEBHOOK_SECRET });
+    const branch = 'patchback/job-deploy-2';
+    const job = await seedPrOpenedJob(store, branch);
+    const res = await post(
+      app,
+      deploymentEvent({ ref: branch, environmentUrl: 'javascript:alert(1)' }),
+    );
+    expect(res.statusCode).toBe(202);
+    expect((await store.getJob(job.id))?.previewUrl).toBeUndefined();
+  });
+
+  it('ignores a production deployment', async () => {
+    const { app, store } = makeApp({ webhookSecret: WEBHOOK_SECRET });
+    const branch = 'patchback/job-deploy-3';
+    const job = await seedPrOpenedJob(store, branch);
+    const res = await post(
+      app,
+      deploymentEvent({ ref: branch, environment: 'production' }),
+    );
+    expect(res.statusCode).toBe(202);
+    expect((await store.getJob(job.id))?.previewUrl).toBeUndefined();
+  });
+
+  it('ignores a failed deployment', async () => {
+    const { app, store } = makeApp({ webhookSecret: WEBHOOK_SECRET });
+    const branch = 'patchback/job-deploy-4';
+    const job = await seedPrOpenedJob(store, branch);
+    const res = await post(
+      app,
+      deploymentEvent({ ref: branch, state: 'failure' }),
+    );
+    expect(res.statusCode).toBe(202);
+    expect((await store.getJob(job.id))?.previewUrl).toBeUndefined();
+  });
+
+  it('ignores an event whose branch matches no job', async () => {
+    const { app } = makeApp({ webhookSecret: WEBHOOK_SECRET });
+    const res = await post(app, deploymentEvent({ ref: 'patchback/job-none' }));
+    expect(res.statusCode).toBe(202);
   });
 });

@@ -36,6 +36,12 @@ export type PatchPipelineResult =
       branch: string;
       prNumber: number;
       prUrl: string;
+      /**
+       * Plain-language, non-technical summary of the change from the adapter's
+       * `summarize()`, for the feedback submitter. Optional and absent-safe:
+       * present only when the agent emitted one. Never fabricated.
+       */
+      userSummary?: string;
       /** 0 when checks passed first try, 1 when a repair attempt was made. */
       repairAttempts: number;
     }
@@ -213,6 +219,9 @@ export function createDefaultPatchPipeline(
               prNumber: pr.number,
               prUrl: pr.url,
               repairAttempts,
+              ...(summary.userSummary !== undefined
+                ? { userSummary: summary.userSummary }
+                : {}),
             };
           },
           scratchBaseDir !== undefined

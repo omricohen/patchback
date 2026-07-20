@@ -158,6 +158,11 @@ export function createFakeGitHubClient(
         url: `https://github.com/${repo.owner}/${repo.repo}/pull/${pullNumber}`,
       };
     },
+    async getPreviewDeploymentUrl(): Promise<string | undefined> {
+      callLog.push('getPreviewDeploymentUrl');
+      // No preview by default; tests override this method to script a URL.
+      return undefined;
+    },
   };
 }
 

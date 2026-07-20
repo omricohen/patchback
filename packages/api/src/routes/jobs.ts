@@ -1,6 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 
-import { canInitiatePatchJob, transitionJob } from '@patchback/types';
+import {
+  canInitiatePatchJob,
+  isSafeHttpUrl,
+  transitionJob,
+} from '@patchback/types';
 
 import type { ApiConfig } from '../config.js';
 import { ApiError, notFound, StoreIntegrityError } from '../errors.js';
@@ -143,6 +147,14 @@ export function registerJobRoutes(
         ...(job.branchName !== undefined ? { branchName: job.branchName } : {}),
         ...(job.prNumber !== undefined ? { prNumber: job.prNumber } : {}),
         ...(job.prUrl !== undefined ? { prUrl: job.prUrl } : {}),
+        ...(job.userSummary !== undefined
+          ? { userSummary: job.userSummary }
+          : {}),
+        // Defence in depth: only surface a previewUrl that still validates as
+        // a safe http(s) URL (it was validated at write time too).
+        ...(job.previewUrl !== undefined && isSafeHttpUrl(job.previewUrl)
+          ? { previewUrl: job.previewUrl }
+          : {}),
         ...(job.error !== undefined ? { error: job.error } : {}),
       });
     },
