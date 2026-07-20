@@ -1,11 +1,32 @@
 # Roadmap
 
-What Patchback deliberately does **not** do in v0.1, and roughly why. Nothing
-here is promised or ordered; it is the parking lot for ideas that were pushed
-out of scope on purpose (see `docs/BUILD_PLAN.md`, "Explicitly out of scope for
-v0.1") plus follow-ups accumulated during the build. The v0.1 product rules —
-no auto-merge, triage before code, trust tiers as a security boundary, opt-in
-capture, local-first — are not on this list and are not up for relaxation.
+What Patchback deliberately does **not** do yet, and roughly why. Nothing here
+is promised or ordered; it is the parking lot for ideas that were pushed out of
+scope on purpose (see `docs/BUILD_PLAN.md`) plus follow-ups accumulated during
+the build. The product rules — no auto-merge, triage before code, trust tiers as
+a security boundary, opt-in capture, local-first — are not on this list and are
+not up for relaxation.
+
+## Shipped in v0.2
+
+These were on the parking lot and are now in the product:
+
+- **Source provenance** (`@patchback/provenance`) — build-time `data-pb-source`
+  `file:line` stamping (Vite / Next SWC + Turbopack / babel), fail-closed path
+  privacy, carried into the feedback payload so the agent starts at the source.
+- **Bounded repair loop** — a failed check triggers one guided repair attempt
+  (`MAX_REPAIR_ATTEMPTS = 1`) before the job fails; `repair.enabled` gates it.
+- **Repo-aware triage (stage 2)** — a fixed-string probe of a local working copy
+  (paths + counts only, one-rung reconcile cap) sharpens the classifier where a
+  checkout exists (`patchback dev` with `localRepoPath`, and the evals).
+- **GitHub Action mode** — signed-ingest + `patchback ci` + HMAC issue markers
+  run the pipeline inside GitHub Actions with no long-running process.
+- **Per-user token exchange** — public-facing apps mint short-lived,
+  tier-ceilinged per-user tokens on their backend (`POST /tokens/exchange`)
+  instead of shipping a raw key to the page.
+- **Feedback outcome view** — the submitter sees a plain-language "what changed"
+  summary (`Job.userSummary`) and, when the host's own preview provider
+  publishes one, a relayed preview link (`Job.previewUrl`).
 
 ## GitHub App mode
 
@@ -23,13 +44,33 @@ API (multi-project, real Postgres/Redis, auth) and a web dashboard for
 browsing feedback, threads, and job history are the obvious next surface —
 but the OSS core stays local-first and telemetry-free regardless.
 
-## Per-user token exchange for the widget
+## Signing-key rotation & key IDs
 
-Today the widget's `apiKey` is the embedding app's key, so every visitor of an
-internal page submits at that key's tier (documented prominently in the widget
-and SDK READMEs). A per-user exchange — the host app trades its own session
-for a short-lived, per-user Patchback token — would give real per-user tiers
-and revocation. Design sketch lives in `.claude/OPEN_ISSUES.md` (2026-07-15).
+v0.2 introduced two symmetric HMAC secrets — the Action-mode issue-marker
+secret (`PATCHBACK_SIGNING_SECRET`) and the per-user token-exchange secret
+(`tokenExchange.signingSecret`). Both rotate today only by swapping the secret,
+which bulk-invalidates every outstanding marker/token at once (no zero-downtime
+overlap, no per-token revoke). A `keyId`/version field in the marker and token
+payloads — with the verifier accepting a small set of active keys — would enable
+overlapping rotation and, for tokens, a place to hang store-backed per-token
+revocation. Shared hook across both secrets; sketch in `.claude/OPEN_ISSUES.md`
+(2026-07-19 marker, 2026-07-20 token).
+
+## Multi-attempt repair
+
+The repair loop is capped at a single guided attempt
+(`MAX_REPAIR_ATTEMPTS = 1`); `repair.enabled` only turns it off. Multiple
+attempts — with a per-job repair budget and per-attempt diff accounting so a
+runaway agent can't inflate cost or blast radius — wait until real repos show a
+class of failures a second guided pass reliably fixes.
+
+## Thread-aggregate job state
+
+Job state today is per-item. A feedback thread with several related items has no
+single rolled-up status ("2 shipped, 1 in review, 1 needs clarification"). A
+thread-aggregate view — derived from member job states, not a new canonical
+state — would make multi-item threads legible in the widget and a future
+dashboard.
 
 ## Check-runner sandboxing
 

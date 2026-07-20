@@ -22,7 +22,23 @@ Design principles:
 
 See [docs/SPEC.md](docs/SPEC.md) and [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md).
 
-## Quickstart
+## Two ways to run it
+
+Patchback ships two deployment modes over the same triage → guarded-brief → patch
+pipeline. Both open PRs and never merge; pick by shape, not by feature.
+
+- **Local (`patchback dev`)** — one process on your machine runs the whole loop
+  (API, workers, in-memory store and queue). Nothing hosted, no Redis/Postgres,
+  PR status polled. This is the ten-minute try-it path — start here.
+- **GitHub Action mode** — no long-running process. A thin signed **ingest**
+  authenticates the submitter and files an HMAC-signed issue; a workflow on your
+  repo runs `patchback ci`, verifies the marker, and drives the same pipeline
+  inside GitHub Actions. This is the team-shape production path.
+
+The enhancements below — the outcome view, per-user tokens, and source
+provenance — apply to **both** modes.
+
+## Quickstart (local `patchback dev`)
 
 Goal: feedback submitted in your app becomes a reviewed pull request on your
 repo, in under ten minutes, with nothing hosted.
@@ -198,7 +214,7 @@ Next.js (SWC and Turbopack), and a plain babel plugin are supported;
 production builds stamp nothing by default. Non-JSX apps can write the
 attribute by hand — it is a documented public contract.
 
-### Optional: GitHub Action mode (no long-running process)
+## GitHub Action mode (team / production, no long-running process)
 
 For a team-shape deployment, run the triage + patch pipeline **inside GitHub
 Actions** on your repo instead of a local `patchback dev` process. A thin
@@ -240,7 +256,7 @@ pnpm lint && pnpm typecheck && pnpm test && pnpm build
 
 Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) (including the
 hard product rules PRs must not cross) and [ROADMAP.md](ROADMAP.md) for what
-is deliberately out of scope in v0.1. Security reports:
+has shipped in v0.2 and what is deliberately still out of scope. Security reports:
 [SECURITY.md](SECURITY.md).
 
 ## License
