@@ -71,12 +71,13 @@ const QUERY_STOP_LIST: ReadonlySet<string> = new Set([
  * The ladder ordering, shared with the demotion gate's implicit order.
  * `needs_human` is the floor (0); `patchable` is the ceiling (2).
  */
-export const CLASSIFICATION_RUNG: Readonly<Record<TriageClassification, number>> =
-  {
-    needs_human: 0,
-    needs_clarification: 1,
-    patchable: 2,
-  };
+export const CLASSIFICATION_RUNG: Readonly<
+  Record<TriageClassification, number>
+> = {
+  needs_human: 0,
+  needs_clarification: 1,
+  patchable: 2,
+};
 
 export function rung(classification: TriageClassification): number {
   return CLASSIFICATION_RUNG[classification];
@@ -169,10 +170,7 @@ export function deriveProbeQueries(
     if (!/[A-Za-z0-9]/.test(trimmed)) {
       continue;
     }
-    if (
-      !trimmed.includes(' ') &&
-      QUERY_STOP_LIST.has(trimmed.toLowerCase())
-    ) {
+    if (!trimmed.includes(' ') && QUERY_STOP_LIST.has(trimmed.toLowerCase())) {
       continue;
     }
     const key = trimmed.toLowerCase();

@@ -1,10 +1,4 @@
-import {
-  mkdir,
-  mkdtemp,
-  rm,
-  symlink,
-  writeFile,
-} from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -14,9 +8,7 @@ import { createLocalRepoProbe, PROBE_LIMITS } from './repo-probe.js';
 
 const tempDirs: string[] = [];
 
-async function makeRepo(
-  files: Record<string, string>,
-): Promise<string> {
+async function makeRepo(files: Record<string, string>): Promise<string> {
   const dir = await mkdtemp(path.join(tmpdir(), 'patchback-probe-'));
   tempDirs.push(dir);
   for (const [rel, content] of Object.entries(files)) {

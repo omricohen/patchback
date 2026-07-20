@@ -2,7 +2,11 @@ import type { FeedbackItem } from '@patchback/types';
 import { describe, expect, it } from 'vitest';
 
 import { triageFeedback, type TriageOptions } from './classifier.js';
-import { TriageModelError, type ModelCaller, type ModelRequest } from './model.js';
+import {
+  TriageModelError,
+  type ModelCaller,
+  type ModelRequest,
+} from './model.js';
 import type { ProbeResult, RepoProbe } from './probe.js';
 import { RETRIEVAL_SYSTEM_PROMPT } from './prompt.js';
 
@@ -87,11 +91,22 @@ describe('stage 2 — outsider never probes (trust boundary)', () => {
 describe('stage 2 — band gating', () => {
   it('does NOT probe a confidently-patchable item above the band', async () => {
     const { callModel, requests } = scriptedCaller(
-      { classification: 'patchable', confidence: 0.95, reasoning: 'clear typo' },
-      { classification: 'needs_human', confidence: 0.9, reasoning: 'should not run' },
+      {
+        classification: 'patchable',
+        confidence: 0.95,
+        reasoning: 'clear typo',
+      },
+      {
+        classification: 'needs_human',
+        confidence: 0.9,
+        reasoning: 'should not run',
+      },
     );
     const { probe, calls } = spyProbe(unambiguous());
-    const result = await triageFeedback(item(), base({ callModel, repoProbe: probe }));
+    const result = await triageFeedback(
+      item(),
+      base({ callModel, repoProbe: probe }),
+    );
     expect(calls).toHaveLength(0);
     expect(requests).toHaveLength(1); // only the first call
     expect(result.classification).toBe('patchable');
@@ -99,11 +114,22 @@ describe('stage 2 — band gating', () => {
 
   it('does NOT probe a confidently-needs_human item above the band', async () => {
     const { callModel, requests } = scriptedCaller(
-      { classification: 'needs_human', confidence: 0.99, reasoning: 'feature request' },
-      { classification: 'patchable', confidence: 0.9, reasoning: 'should not run' },
+      {
+        classification: 'needs_human',
+        confidence: 0.99,
+        reasoning: 'feature request',
+      },
+      {
+        classification: 'patchable',
+        confidence: 0.9,
+        reasoning: 'should not run',
+      },
     );
     const { probe, calls } = spyProbe(unambiguous());
-    const result = await triageFeedback(item(), base({ callModel, repoProbe: probe }));
+    const result = await triageFeedback(
+      item(),
+      base({ callModel, repoProbe: probe }),
+    );
     expect(calls).toHaveLength(0);
     expect(requests).toHaveLength(1);
     expect(result.classification).toBe('needs_human');
@@ -111,7 +137,12 @@ describe('stage 2 — band gating', () => {
 
   it('does NOT probe when no usable queries can be derived', async () => {
     const { callModel, requests } = scriptedCaller(
-      { classification: 'needs_clarification', confidence: 0.8, reasoning: 'vague', clarifyingQuestion: 'which?' },
+      {
+        classification: 'needs_clarification',
+        confidence: 0.8,
+        reasoning: 'vague',
+        clarifyingQuestion: 'which?',
+      },
       { classification: 'patchable', confidence: 0.9, reasoning: 'nope' },
     );
     const { probe, calls } = spyProbe(unambiguous());
@@ -129,11 +160,23 @@ describe('stage 2 — band gating', () => {
 describe('stage 2 — reconciliation through the full pipeline', () => {
   it('raises a borderline needs_clarification to patchable on an unambiguous match', async () => {
     const { callModel, requests } = scriptedCaller(
-      { classification: 'needs_clarification', confidence: 0.6, reasoning: 'maybe a typo', clarifyingQuestion: 'which label?' },
-      { classification: 'patchable', confidence: 0.9, reasoning: 'single-file string' },
+      {
+        classification: 'needs_clarification',
+        confidence: 0.6,
+        reasoning: 'maybe a typo',
+        clarifyingQuestion: 'which label?',
+      },
+      {
+        classification: 'patchable',
+        confidence: 0.9,
+        reasoning: 'single-file string',
+      },
     );
     const { probe, calls } = spyProbe(unambiguous());
-    const result = await triageFeedback(item(), base({ callModel, repoProbe: probe }));
+    const result = await triageFeedback(
+      item(),
+      base({ callModel, repoProbe: probe }),
+    );
     expect(calls).toEqual([expect.any(Number)]); // probed once
     expect(requests).toHaveLength(2); // both model calls
     expect(result.classification).toBe('patchable');
@@ -142,21 +185,40 @@ describe('stage 2 — reconciliation through the full pipeline', () => {
   it('raises a borderline needs_human at most to needs_clarification, NEVER patchable', async () => {
     const { callModel } = scriptedCaller(
       { classification: 'needs_human', confidence: 0.7, reasoning: 'unsure' },
-      { classification: 'patchable', confidence: 0.99, reasoning: 'model tried to jump two rungs' },
+      {
+        classification: 'patchable',
+        confidence: 0.99,
+        reasoning: 'model tried to jump two rungs',
+      },
     );
     const { probe } = spyProbe(unambiguous());
-    const result = await triageFeedback(item(), base({ callModel, repoProbe: probe }));
+    const result = await triageFeedback(
+      item(),
+      base({ callModel, repoProbe: probe }),
+    );
     // Two-rung jump is clamped back to stage1 needs_human.
     expect(result.classification).toBe('needs_human');
   });
 
   it('raised patchable must still clear the 0.7 gate on stage2 confidence', async () => {
     const { callModel } = scriptedCaller(
-      { classification: 'needs_clarification', confidence: 0.6, reasoning: 'maybe', clarifyingQuestion: 'q?' },
-      { classification: 'patchable', confidence: 0.6, reasoning: 'raised label but low confidence' },
+      {
+        classification: 'needs_clarification',
+        confidence: 0.6,
+        reasoning: 'maybe',
+        clarifyingQuestion: 'q?',
+      },
+      {
+        classification: 'patchable',
+        confidence: 0.6,
+        reasoning: 'raised label but low confidence',
+      },
     );
     const { probe } = spyProbe(unambiguous());
-    const result = await triageFeedback(item(), base({ callModel, repoProbe: probe }));
+    const result = await triageFeedback(
+      item(),
+      base({ callModel, repoProbe: probe }),
+    );
     // reconcile raises to patchable@0.6, then the demotion ladder sends it back.
     expect(result.classification).toBe('needs_clarification');
   });
@@ -165,30 +227,53 @@ describe('stage 2 — reconciliation through the full pipeline', () => {
 describe('stage 2 — failure isolation', () => {
   it('falls back to stage1 when the SECOND model call fails', async () => {
     const { callModel } = scriptedCaller(
-      { classification: 'needs_clarification', confidence: 0.8, reasoning: 'stage1 holds', clarifyingQuestion: 'q?' },
-      { classification: 'patchable', confidence: 0.9, reasoning: 'never reached' },
+      {
+        classification: 'needs_clarification',
+        confidence: 0.8,
+        reasoning: 'stage1 holds',
+        clarifyingQuestion: 'q?',
+      },
+      {
+        classification: 'patchable',
+        confidence: 0.9,
+        reasoning: 'never reached',
+      },
       { failStage2: true },
     );
     const { probe } = spyProbe(unambiguous());
-    const result = await triageFeedback(item(), base({ callModel, repoProbe: probe }));
+    const result = await triageFeedback(
+      item(),
+      base({ callModel, repoProbe: probe }),
+    );
     expect(result.classification).toBe('needs_clarification');
   });
 });
 
 describe('stage 2 — absent probe is byte-identical to the single-call path', () => {
   it('produces the same result with and without an (unused) probe wiring', async () => {
-    const stage1 = { classification: 'patchable', confidence: 0.95, reasoning: 'clear' };
+    const stage1 = {
+      classification: 'patchable',
+      confidence: 0.95,
+      reasoning: 'clear',
+    };
     const withoutProbe = scriptedCaller(stage1, stage1);
     const noProbe = await triageFeedback(
       item(),
-      base({ callModel: withoutProbe.callModel, now: () => new Date('2026-07-10T12:00:00Z') }),
+      base({
+        callModel: withoutProbe.callModel,
+        now: () => new Date('2026-07-10T12:00:00Z'),
+      }),
     );
     // Confident patchable never probes, so wiring a probe changes nothing.
     const withProbeCaller = scriptedCaller(stage1, stage1);
     const { probe } = spyProbe(unambiguous());
     const withProbe = await triageFeedback(
       item(),
-      base({ callModel: withProbeCaller.callModel, repoProbe: probe, now: () => new Date('2026-07-10T12:00:00Z') }),
+      base({
+        callModel: withProbeCaller.callModel,
+        repoProbe: probe,
+        now: () => new Date('2026-07-10T12:00:00Z'),
+      }),
     );
     expect(withProbe).toEqual(noProbe);
   });

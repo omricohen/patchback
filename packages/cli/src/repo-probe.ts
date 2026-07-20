@@ -53,7 +53,11 @@ const IGNORE_DIRS: ReadonlySet<string> = new Set([
 const SEGMENT = /^[A-Za-z0-9_][A-Za-z0-9_.-]*$/;
 
 /** Non-overlapping fixed-string occurrence count. No regex. */
-function countOccurrences(haystack: string, needle: string, cap: number): number {
+function countOccurrences(
+  haystack: string,
+  needle: string,
+  cap: number,
+): number {
   if (needle.length === 0) {
     return 0;
   }
@@ -101,7 +105,6 @@ export function createLocalRepoProbe(rootDir: string): RepoProbe {
   }
 
   return {
-    // eslint-disable-next-line @typescript-eslint/require-await
     async search(queries: readonly string[]): Promise<ProbeResult> {
       const started = Date.now();
       const usable = queries.filter((q) => q.length > 0);

