@@ -94,6 +94,74 @@ Uncertain feedback never reaches the agent: the triage step classifies it
 `needs_human` instead. Submissions without an API key are `outsider` tier —
 stored as data, never turned into instructions.
 
+### Public-facing apps: per-user token exchange
+
+The dev quickstart above ships the embedding app's `apiKey` to the page. That is
+fine for an **internal app behind your own auth** (every visitor is a trusted
+teammate), but on a **public-facing or many-user app** a raw key in page source
+would confer its tier on every visitor. For those, mint a **short-lived,
+tier-scoped per-user token** on your **backend** and hand it to the widget:
+
+```
+Browser (widget)            Your app backend              Patchback API
+     │                             │                            │
+     │  GET /patchback-token ─────▶│  (authenticates the user   │
+     │  (your app's session)       │   via YOUR session)        │
+     │                             │  POST /tokens/exchange ───▶ │
+     │                             │  Authorization: <server key>│
+     │                             │  { tier, ttlMs, subject }   │
+     │                             │◀── { token, tier, expiresAt}│
+     │◀── { token, expiresAt } ────│                            │
+     │                                                          │
+     │== token as Bearer for /feedback, /feedback/:id, /jobs ==▶│
+```
+
+Enable it on the API with an opt-in signing secret:
+
+```ts
+buildServer({
+  /* …store, queue, github, apiKeys… */
+  tokenExchange: { signingSecret: process.env.PATCHBACK_TOKEN_SECRET },
+});
+```
+
+Then, in your app's backend, expose a tiny endpoint (your framework, your
+session) that exchanges the server key:
+
+```ts
+// GET /patchback-token — server-side; the browser never sees the API key.
+app.get('/patchback-token', requireAppSession, async (req, res) => {
+  const r = await fetch('https://patchback.your.host/tokens/exchange', {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${process.env.PATCHBACK_API_KEY}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ tier: 'insider', subject: req.user.id }),
+  });
+  res.json(await r.json()); // { token, tier, expiresAt }
+});
+```
+
+And point the widget at it (no `apiKey` — the two are mutually exclusive):
+
+```ts
+createPatchbackWidget({
+  apiUrl: 'https://patchback.your.host',
+  getToken: () => fetch('/patchback-token').then((r) => r.json()),
+});
+```
+
+The widget caches the token and re-fetches it before it expires. Key
+guarantees: the exchange endpoint is **server-only** (it requires your parent
+key, rejects browser-origin requests, and is never CORS-exposed — a browser can
+never call it), a minted token can **never exceed its parent key's tier**, its
+expiry is enforced on **every** request, and an expired/leaked token grants only
+its already-limited tier for a bounded window (revoke everything at once by
+rotating `tokenExchange.signingSecret`). See the
+[SDK](packages/sdk/README.md) and [widget](packages/widget/README.md) READMEs
+for the full flow.
+
 ### Optional: source provenance (better localization)
 
 Add [`@patchback/provenance`](packages/provenance) to your app's build and

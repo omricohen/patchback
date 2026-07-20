@@ -74,6 +74,24 @@ Invalid transitions throw. `packages/types` is the single source of truth.
    only after the repair also fails; no new job states (the loop is internal
    to `patch.running`). Repair is on by default and can be disabled, but the
    one-attempt cap is fixed in v0.2.
+8. **Browser tokens are short-lived, tier-ceilinged credentials for
+   public-facing apps (v0.2).** The embedding app's BACKEND mints a per-user
+   token by exchanging its server-held API key at the server-only
+   `POST /tokens/exchange` (opt-in via `ApiConfig.tokenExchange`; absent ⇒ the
+   route is not registered and the API is byte-identical to a keys-only
+   deployment). A minted token can NEVER exceed its parent key's tier
+   (requesting higher is a loud 4xx, never a silent clamp) and its expiry is
+   enforced on EVERY request; an expired/invalid token fails closed to
+   `outsider` (data-only), exactly like the keyless path — never a 401. The
+   exchange endpoint is the most sensitive surface (a call mints a
+   tier-bearing token): it requires the full parent key, rejects
+   browser-origin requests (`Origin`/`Sec-Fetch-Site`/`Sec-Fetch-Dest`), is
+   never CORS-exposed, and a token cannot mint another token (no chaining).
+   Tokens are signed stateless HMAC (reusing the issue-marker discipline), so
+   revocation is by short TTL + signing-secret rotation, not per-token. The
+   widget/SDK accept such a token (and a refresh callback that re-fetches it
+   from the app's OWN backend — never from Patchback). Long-lived direct keys
+   remain fully supported and unchanged for the internal-app path.
 
 ## Local-first constraint
 
