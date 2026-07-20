@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { existsSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
@@ -20,11 +20,12 @@ import type { AgentAdapter } from '@patchback/agent-core';
 import { createClaudeCodeAdapter } from '@patchback/agent-claude-code';
 import type { GitHubClient } from '@patchback/github';
 import { createTokenClient } from '@patchback/github';
-import type { ModelCaller } from '@patchback/triage';
+import type { ModelCaller, RepoProbe } from '@patchback/triage';
 import { createAnthropicModelCaller } from '@patchback/triage';
 import type { FastifyInstance } from 'fastify';
 
 import { parseRepoRef, type PatchbackConfig } from './config-file.js';
+import { createLocalRepoProbe } from './repo-probe.js';
 import { CliError } from './errors.js';
 import { probeGitHubToken, probeRepoScripts } from './github-probe.js';
 import {
@@ -60,6 +61,8 @@ export interface DevSeams {
   /** Skip the startup GitHub probes (implied when githubClient is injected). */
   skipProbes?: boolean;
   pollIntervalMs?: number;
+  /** Repo-aware triage probe override (tests inject a fake). */
+  repoProbe?: RepoProbe;
 }
 
 export interface DevOptions {
@@ -195,6 +198,24 @@ export async function runDev(options: DevOptions): Promise<DevHandle> {
       ? `https://x-access-token:${secrets.githubToken}@github.com/${repo.owner}/${repo.name}.git`
       : `https://github.com/${repo.owner}/${repo.name}.git`);
 
+  // Repo-aware triage stage 2 is enabled iff a real on-disk working copy
+  // exists at triage time — i.e. `localRepoPath` is a real directory. A GitHub
+  // URL is a clone SOURCE, not a working copy, so it wires no probe (stage 2
+  // stays off, behaviour byte-identical to today). Presence of the probe IS the
+  // switch — there is no separate "enable retrieval" flag.
+  let repoProbe: RepoProbe | undefined = seams.repoProbe;
+  let repoProbeActive = repoProbe !== undefined;
+  if (repoProbe === undefined && config.localRepoPath !== undefined) {
+    try {
+      if (statSync(config.localRepoPath).isDirectory()) {
+        repoProbe = createLocalRepoProbe(config.localRepoPath);
+        repoProbeActive = true;
+      }
+    } catch {
+      // Not a real directory — leave stage 2 off (fail-safe).
+    }
+  }
+
   const pipelineOrAdapter: Pick<
     ApiConfig,
     'pipeline' | 'adapter' | 'repoSource' | 'baseBranch'
@@ -233,9 +254,19 @@ export async function runDev(options: DevOptions): Promise<DevHandle> {
     ...(config.appOrigins !== undefined && config.appOrigins.length > 0
       ? { cors: { allowedOrigins: config.appOrigins } }
       : {}),
+    ...(repoProbe !== undefined ? { repoProbe } : {}),
     log: (message) => logger.warn(message),
     ...pipelineOrAdapter,
   };
+
+  if (repoProbeActive) {
+    // One line so the operator knows a borderline item may trigger a second
+    // (retrieval) triage model call. Never prints file contents or matches.
+    logger.warn(
+      'repo-aware triage: on — borderline items probe the local working copy ' +
+        '(paths + counts only; see the working-copy-skew note in OPEN_ISSUES)',
+    );
+  }
 
   const app = buildServer(apiConfig);
 

@@ -1,8 +1,62 @@
 # STATE — where we left off
 
-_Last updated: 2026-07-19 (v0.2 Phase 2 session)_
+_Last updated: 2026-07-19 (v0.2 Phase 3 session)_
 
 ## Current phase
+
+**v0.2 Phase 3 — Repo-aware triage (stage 2): DONE** on branch
+`v2-3-triage-retrieval` (branched from up-to-date main; NOT merged, NOT
+pushed — Omri's call). Phases 1 (`v2-1-provenance`) and 2 (`v2-2-repair-loop`)
+are still unmerged too. Plan:
+`.a5c/runs/01KXXPDF1Y7TMPE4J22S3GNN6K/artifacts/phase-3-plan.md` (approved
+with owner Decisions A + B — see DECISIONS 2026-07-19).
+
+### What's done (Phase 3)
+
+- **`@patchback/triage` stage 2** — optional retrieval second pass. New
+  `RepoProbe` seam (`src/probe.ts`, interface only, no `node:fs`), pure logic
+  in `src/retrieval.ts` (`isBorderline`, `deriveProbeQueries`,
+  `renderProbeEvidence`, `reconcile`, `isUnambiguous`, rung map, constants),
+  a second frozen `RETRIEVAL_SYSTEM_PROMPT` + `buildRetrievalUserMessage`
+  (`src/prompt.ts`), and the orchestration in `triageFeedback`
+  (`src/classifier.ts`): stage 1 unchanged, then IF a probe is injected AND
+  the result is borderline, derive queries → probe → second call →
+  `reconcile`. Absent probe ⇒ byte-identical to today.
+- **Decision A (LITERAL one-rung cap)** — `reconcile` allows DOWN always, UP
+  by exactly one rung under strict unambiguity; `needs_human` may rise to
+  `needs_clarification` but NEVER to `patchable` (two rungs) — structurally
+  guaranteed (`r2 - r1 === 1`), property-tested. `needs_human` is now
+  probe-eligible (band-gated).
+- **Decision B (paths + counts only)** — probe output carries no file
+  contents / snippets; evidence references queries by index; type-level
+  containment (`ProbeResult` has no text field), still nonce-wrapped +
+  sanitised + capped.
+- **`LocalRepoProbe`** (`packages/cli/src/repo-probe.ts`) — deterministic
+  in-process fixed-string search (no shell, no regex), ignore list
+  (`.git`/`node_modules`/`.env`/dotfiles/dist/build/.next/coverage), file/
+  byte/time caps → `truncated`, symlink-escape refusal, path-shape validation,
+  NUL binary guard. Wired in `dev.ts` iff `localRepoPath` is a real dir (one
+  banner line); `ApiConfig.repoProbe` threaded through the triage worker (the
+  hosted API never sets it ⇒ stage 2 dead code there).
+- **Gating (final)** — `needs_clarification` always probes; `patchable` and
+  (Decision A) `needs_human` probe only inside the band `[0.55, 0.85]`
+  (δ=`DEFAULT_RETRIEVAL_BAND` 0.15); confidently-settled items above the band
+  never probe.
+- **Tests** — `retrieval.test.ts` (band gating, one-rung cap property test
+  incl. nh→nc allowed / nh→patchable forbidden, unambiguity, input safety
+  with `$(rm -rf /)` etc., output containment), `classifier.stage2.test.ts`
+  (outsider-never-probes spy, band gating, reconcile through the full
+  pipeline, second-call-failure fallback, absent-probe byte-identical),
+  `repo-probe.test.ts` (fixed-string, ignore-list secret-unsearchable,
+  symlink refusal, caps, NUL guard). Evals: generic fixture repo under
+  `evals/fixtures/repo/` + 8 borderline fixtures + eval probe; sanity pins 39
+  fixtures and the absolute injection gate.
+- **Gate** — `pnpm lint && typecheck && test && build` all green offline.
+  Live eval env-gated: ran it (sourced `.env`) and it failed specifically on
+  "Your credit balance is too low" (external funding, not a phase failure) —
+  liveEval = blocked-credit; see OPEN_ISSUES.
+
+## Previous phase
 
 **v0.2 Phase 2 — Bounded repair iteration: DONE** on branch
 `v2-2-repair-loop` (branched from main; NOT merged, NOT pushed — Omri's
@@ -90,11 +144,12 @@ in full, including the @babel/core dependency).
 
 ## Next concrete step
 
-v0.2 Phase 3 per the v0.2 plan (Omri to point at the next phase artifact), or
-review + merge `v2-1-provenance` then `v2-2-repair-loop`. When credit is
-restored, re-run the live e2e (real Claude CLI) to confirm the repair path
-end-to-end. Release-note reminder: older API 400s a newer widget that sends
-sourceHint (see OPEN_ISSUES 2026-07-19).
+v0.2 Phase 4 per the v0.2 plan (Omri to point at the next phase artifact), or
+review + merge the stack `v2-1-provenance` → `v2-2-repair-loop` →
+`v2-3-triage-retrieval` in order. When credit is restored, re-run the live
+triage eval (retrieval fixtures) to confirm ≥90% + the injection gate, and the
+Phase-2 live e2e. Release-note reminder: older API 400s a newer widget that
+sends sourceHint (see OPEN_ISSUES 2026-07-19).
 
 ---
 

@@ -20,19 +20,19 @@ lint/tests → PR → human review → status back to widget
 
 ## Components
 
-| Package                      | Responsibility                                                                                                                                                  |
-| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `packages/widget`            | Vanilla embeddable widget: launcher, panel, element picker, screenshot capture, console-error ring buffer, masking engine, thread view                          |
-| `packages/react`             | React 18 wrapper + hooks (`@patchback/react`)                                                                                                                   |
-| `packages/sdk`               | Client SDK: submit, thread, status                                                                                                                              |
-| `packages/api`               | Fastify app: feedback, jobs, webhooks; Drizzle/Postgres; BullMQ with in-memory fallback                                                                         |
-| `packages/github`            | Token + App modes; issues/branches/PRs                                                                                                                          |
-| `packages/agent-core`        | Adapter interface (prepare, plan, execute, summarize), planner, repo-reader, scratch-dir lifecycle, check-runner, bounded repair loop (v0.2)                    |
-| `packages/agent-claude-code` | Default adapter: spawns Claude Code CLI headless, diff-size ceiling (default ~300 lines)                                                                        |
-| `packages/triage`            | Classifier + evals: `patchable` \| `needs_clarification` \| `needs_human`                                                                                       |
-| `packages/cli`               | `patchback` CLI incl. `npx patchback dev`                                                                                                                       |
-| `packages/types`             | Shared types: feedback item, job states, trust tiers, state machine, source-hint validator                                                                      |
-| `packages/provenance`        | Build-time source provenance (v0.2): `jsxImportSource` dev-runtime stamping of `data-pb-source="file:line"`, Vite/Next integrations, babel plugin (prod opt-in) |
+| Package                      | Responsibility                                                                                                                                                                                                         |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/widget`            | Vanilla embeddable widget: launcher, panel, element picker, screenshot capture, console-error ring buffer, masking engine, thread view                                                                                 |
+| `packages/react`             | React 18 wrapper + hooks (`@patchback/react`)                                                                                                                                                                          |
+| `packages/sdk`               | Client SDK: submit, thread, status                                                                                                                                                                                     |
+| `packages/api`               | Fastify app: feedback, jobs, webhooks; Drizzle/Postgres; BullMQ with in-memory fallback                                                                                                                                |
+| `packages/github`            | Token + App modes; issues/branches/PRs                                                                                                                                                                                 |
+| `packages/agent-core`        | Adapter interface (prepare, plan, execute, summarize), planner, repo-reader, scratch-dir lifecycle, check-runner, bounded repair loop (v0.2)                                                                           |
+| `packages/agent-claude-code` | Default adapter: spawns Claude Code CLI headless, diff-size ceiling (default ~300 lines)                                                                                                                               |
+| `packages/triage`            | Classifier + evals: `patchable` \| `needs_clarification` \| `needs_human`; optional repo-aware stage 2 (deterministic fixed-string `RepoProbe`, paths+counts only, one-rung reconcile cap) for borderline items (v0.2) |
+| `packages/cli`               | `patchback` CLI incl. `npx patchback dev`                                                                                                                                                                              |
+| `packages/types`             | Shared types: feedback item, job states, trust tiers, state machine, source-hint validator                                                                                                                             |
+| `packages/provenance`        | Build-time source provenance (v0.2): `jsxImportSource` dev-runtime stamping of `data-pb-source="file:line"`, Vite/Next integrations, babel plugin (prod opt-in)                                                        |
 
 ## Job state machine (canonical)
 

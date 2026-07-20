@@ -5,3 +5,4 @@ coverage/
 .a5c/
 extraction-inbox/
 pnpm-lock.yaml
+packages/triage/evals/fixtures/repo/

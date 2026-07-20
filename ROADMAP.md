@@ -46,6 +46,21 @@ AGENTS.md, package.json scripts). A proper index — symbols, ownership, prior
 PRs — would let triage and the agent target changes in large repos with less
 context stuffing.
 
+## Hosted / indexed repo-aware triage
+
+v0.2's repo-aware triage stage 2 (fixed-string probe of a local working copy,
+paths+counts only, one-rung reconcile cap) runs ONLY where a real checkout
+already exists — `patchback dev` with `localRepoPath`, and the evals. The
+hosted API worker has no working copy at triage time (the clone happens later,
+per-patchable item), so stage 2 is deliberately dead code there — we rejected
+clone-for-triage because it would clone on every borderline item, including
+hostile submissions (a DoS/cost amplifier). Bringing repo-aware triage to the
+hosted path wants a persistent/indexed checkout pinned to the base commit
+(which also fixes the local-mode working-copy-skew limitation), plus a probe
+that can withstand adversarial submission volume. Semantic/embedding retrieval
+(vs today's literal fixed-string) is a further extension. Both explicitly out
+of scope until hosted mode happens.
+
 ## Outsider feedback clustering
 
 Outsider-tier feedback is stored but never becomes agent input. Clustering
