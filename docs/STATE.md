@@ -1,13 +1,57 @@
 # STATE — where we left off
 
-_Last updated: 2026-07-19 (v0.2 Phase 3 session)_
+_Last updated: 2026-07-19 (v0.2 Phase 4 session)_
 
 ## Current phase
 
+**v0.2 Phase 4 — GitHub Action mode: DONE (offline gate green)** on branch
+`v2-4-action-mode` (branched from up-to-date main; NOT merged, NOT pushed —
+Omri's call). Phases 1–3 (`v2-1-provenance`, `v2-2-repair-loop`,
+`v2-3-triage-retrieval`) are still unmerged too. Plan:
+`.a5c/runs/01KXXPDF1Y7TMPE4J22S3GNN6K/artifacts/phase-4-plan.md` (approved with
+owner decisions: CI auto-proceeds patchable→patch with PR review as the human
+gate — no auto-merge; live round-trip in scope now that credit is restored).
+
+### What's done (Phase 4)
+
+- **HMAC issue marker** (`packages/api/src/issue-marker.ts`, new) — the trust
+  core. `signIssueMarker`/`buildSignedIssueBody`/`verifyIssueMarker` bind
+  contentHash + tier + feedbackId nonce + repo + issuedAt; reuse the webhook
+  constant-time HMAC discipline; re-canonicalize the parsed payload before
+  verifying (key-order can't change what's signed). Fail-closed with a
+  reason-for-logs on absent/malformed/bad-sig/content-mismatch/repo-mismatch/
+  stale/bad-tier. Exhaustive tamper-battery unit tests.
+- **issueEmitter ingest mode** (`config.ts` + `routes/feedback.ts`) —
+  DEFAULT-OFF; when set, `POST /feedback` assigns tier server-side, signs a
+  marker, and opens a labeled issue — no triage/pipeline/store. Outsider
+  feedback accepted but NOT emitted. Absent-field byte-identical test.
+- **`patchback ci`** (`packages/cli/src/ci.ts`, new) — verifies the marker
+  FIRST, then reconstructs a FeedbackItem from the SIGNED fields and drives it
+  through the UNCHANGED triage worker → guarded brief factory → patch pipeline.
+  Invalid/absent/tampered/stale ⇒ neutral exit, ZERO downstream calls
+  (spy-asserted battery). Signed-outsider ⇒ blocked. Auto-proceeds
+  patchable→patch; comments the outcome on the issue; job id === feedbackId ⇒
+  deterministic branch (replay can't open a second PR). Every seam injectable.
+- **`patchback init --github-action`** + `workflow-template.ts` (new) —
+  scaffolds the least-privilege `.github/workflows/patchback.yml`
+  (contents/issues/pull-requests: write only, label `if:` filter,
+  concurrency, timeout), mints a signing secret printed ONCE with `gh secret
+  set` steps, writes NO secret files.
+- **`action/`** (new) — composite `action.yml` (`npx patchback@<pin> ci`, no
+  committed JS bundle) + README (trust model, permissions, secret custody).
+- **`@patchback/github`** — added `createIssueComment` (status-back only; no
+  merge power; no-merge invariant test still holds). Token client + unit test.
+- **Gate** — `pnpm lint && typecheck && test && build` + `format:check` all
+  green offline. (The pre-existing `fake-claude.mjs` format drift noted in
+  OPEN_ISSUES was already fixed on main — format:check is clean.)
+- **Live round-trip** — NOT run this session (see "Next concrete step"); the
+  offline fake-driven suite is the primary/required proof and is green.
+
+## Previous phase
+
 **v0.2 Phase 3 — Repo-aware triage (stage 2): DONE** on branch
 `v2-3-triage-retrieval` (branched from up-to-date main; NOT merged, NOT
-pushed — Omri's call). Phases 1 (`v2-1-provenance`) and 2 (`v2-2-repair-loop`)
-are still unmerged too. Plan:
+pushed — Omri's call). Plan:
 `.a5c/runs/01KXXPDF1Y7TMPE4J22S3GNN6K/artifacts/phase-3-plan.md` (approved
 with owner Decisions A + B — see DECISIONS 2026-07-19).
 
@@ -144,12 +188,31 @@ in full, including the @babel/core dependency).
 
 ## Next concrete step
 
-v0.2 Phase 4 per the v0.2 plan (Omri to point at the next phase artifact), or
-review + merge the stack `v2-1-provenance` → `v2-2-repair-loop` →
-`v2-3-triage-retrieval` in order. When credit is restored, re-run the live
-triage eval (retrieval fixtures) to confirm ≥90% + the injection gate, and the
-Phase-2 live e2e. Release-note reminder: older API 400s a newer widget that
-sends sourceHint (see OPEN_ISSUES 2026-07-19).
+**Phase 4 live round-trip (orchestrator/Omri):** credit is restored and
+`ANTHROPIC_API_KEY` is set on `omricohen/testingPatchBack`, so the live
+issue→CI→PR round-trip is in scope but was NOT run in this session. To drive it
+safely without ever printing secrets:
+
+1. `set -a; . ./.env; set +a` in a subshell to load `GITHUB_TOKEN` +
+   `ANTHROPIC_API_KEY` (never echo them).
+2. `gh secret set PATCHBACK_SIGNING_SECRET --repo omricohen/testingPatchBack`
+   with a value read from a subshell (e.g. `$(openssl rand -hex 32)`), and set
+   the SAME value in the ingest. Also `gh secret set ANTHROPIC_API_KEY` if not
+   already present.
+3. Push `.github/workflows/patchback.yml` (or point the composite action ref at
+   this branch) to the scratch repo.
+4. Open a signed patchback issue via the ingest (`issueEmitter` mode) with a
+   real seeded-defect + user-voice report (per the 2026-07-15 live-e2e fixture
+   posture — a real typo, never an instruction).
+5. Confirm a real Action run opens a real PR, then CLEAN UP: close the PR/issue,
+   delete the branch, remove the seeded file, and delete the repo secret if it
+   was added only for the test.
+
+Then: review + merge the stack `v2-1-provenance` → `v2-2-repair-loop` →
+`v2-3-triage-retrieval` → `v2-4-action-mode` in order. Also still pending from
+Phase 3: re-run the live triage eval (retrieval fixtures) for ≥90% + injection
+gate. Release-note reminder: older API 400s a newer widget that sends
+sourceHint (see OPEN_ISSUES 2026-07-19).
 
 ---
 
