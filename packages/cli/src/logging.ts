@@ -186,6 +186,7 @@ export function instrumentStore(
     getJob: (id) => store.getJob(id),
     getJobByFeedbackId: (feedbackId) => store.getJobByFeedbackId(feedbackId),
     getJobByPrNumber: (prNumber) => store.getJobByPrNumber(prNumber),
+    getJobByBranchName: (branchName) => store.getJobByBranchName(branchName),
     async updateJob(job: Job, expectedState: JobState) {
       const scrubbed = scrubJob(job);
       const swapped = await store.updateJob(scrubbed, expectedState);

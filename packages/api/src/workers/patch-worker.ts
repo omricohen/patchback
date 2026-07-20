@@ -86,6 +86,11 @@ export async function runPatchTask(
         branchName: result.branch,
         prNumber: result.prNumber,
         prUrl: result.prUrl,
+        // Additive, absent-safe: the plain-language summary rides the same
+        // pr.opened write as prUrl when the agent produced one.
+        ...(result.userSummary !== undefined
+          ? { userSummary: result.userSummary }
+          : {}),
       };
       const swapped = await store.updateJob(updated, 'patch.running');
       if (!swapped) {

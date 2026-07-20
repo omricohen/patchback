@@ -151,6 +151,16 @@ export class DrizzleStore implements Store {
     return row === undefined ? undefined : mapJobRow(row);
   }
 
+  async getJobByBranchName(branchName: string): Promise<Job | undefined> {
+    const rows = await this.db
+      .select()
+      .from(jobs)
+      .where(eq(jobs.branchName, branchName))
+      .limit(1);
+    const row = rows[0];
+    return row === undefined ? undefined : mapJobRow(row);
+  }
+
   async updateJob(job: Job, expectedState: JobState): Promise<boolean> {
     assertJobStateValue(job.id, job.state);
     const updated = await this.db
@@ -184,6 +194,8 @@ function jobToRow(job: Job): typeof jobs.$inferInsert {
     branchName: job.branchName ?? null,
     prNumber: job.prNumber ?? null,
     prUrl: job.prUrl ?? null,
+    userSummary: job.userSummary ?? null,
+    previewUrl: job.previewUrl ?? null,
     error: job.error ?? null,
     createdAt: new Date(job.createdAt),
     updatedAt: new Date(job.updatedAt),
@@ -237,6 +249,8 @@ export function mapJobRow(row: JobRow): Job {
     ...(row.branchName !== null ? { branchName: row.branchName } : {}),
     ...(row.prNumber !== null ? { prNumber: row.prNumber } : {}),
     ...(row.prUrl !== null ? { prUrl: row.prUrl } : {}),
+    ...(row.userSummary !== null ? { userSummary: row.userSummary } : {}),
+    ...(row.previewUrl !== null ? { previewUrl: row.previewUrl } : {}),
     ...(row.error !== null ? { error: row.error } : {}),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),

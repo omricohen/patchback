@@ -95,6 +95,39 @@ export function assertTransition(from: JobState, to: JobState): JobState {
   return to;
 }
 
+/**
+ * Upper bound on a surfaced URL, mirroring the 2000-char cap the capture
+ * schema uses for `capture.url`. A value longer than this is rejected.
+ */
+export const MAX_URL_LENGTH = 2000;
+
+/**
+ * True iff `value` is an absolute `http(s)` URL and no longer than
+ * {@link MAX_URL_LENGTH}. This is the single gate that keeps a
+ * `javascript:` / `data:` / other-scheme URI out of `Job.previewUrl` at the
+ * point of storage (and, defensively, again before render). Anything that is
+ * not a string, not parseable as a URL, not `http:`/`https:`, or carrying
+ * embedded credentials (`user:pass@`) returns `false`.
+ */
+export function isSafeHttpUrl(value: unknown): value is string {
+  if (typeof value !== 'string' || value.length > MAX_URL_LENGTH) {
+    return false;
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return false;
+  }
+  // Defense in depth: a preview URL never legitimately carries credentials, and
+  // a `user:pass@host` form both leaks secrets into an anchor and can disguise
+  // the real host from the reader. Reject it.
+  return parsed.username === '' && parsed.password === '';
+}
+
 /** One entry in a job's audit trail of state changes. */
 export interface JobStateChange {
   from: JobState;
@@ -123,6 +156,37 @@ export interface Job {
   prNumber?: number;
   /** Human-facing PR URL, set once `pr.opened` is reached. */
   prUrl?: string;
+  /**
+   * Plain-language, non-technical summary of what this change does, in the
+   * submitter's terms — one or two sentences, with NO diff, file names, or
+   * jargon. Produced by the agent's execute()/summarize path (see
+   * agent-core's `AgentSummary`), distinct from the technical PR body. Set
+   * once, at `pr.opened`, alongside `prUrl`; its presence therefore tracks
+   * "a PR exists". Best-effort: if the agent omits it, this field is simply
+   * absent — it is never fabricated and never fails the job.
+   *
+   * TRUST: this is agent OUTPUT shown to a human. It is DISPLAY-only,
+   * terminal data on the job — it must NEVER be read back into triage, a
+   * brief, a prompt, or any decision. There is no prompt-injection path INTO
+   * the pipeline through this field; the only residual concern is display
+   * safety (render as a text node, never innerHTML).
+   */
+  userSummary?: string;
+  /**
+   * URL of the host's OWN preview deployment for this change, surfaced from
+   * the GitHub Deployments API (`environment_url` on the latest non-production
+   * deployment status for the PR head sha). Set LATER and independently of
+   * `prUrl` (a deploy finishes after the PR opens) by the dev poller or the
+   * hosted `deployment_status` webhook — never guaranteed. Absent is the
+   * normal case for hosts without a preview system.
+   *
+   * Patchback does NOT provision preview environments; it only relays a URL
+   * the host's existing preview system already published. EXTERNAL,
+   * provider-controlled data: validated to be an absolute http(s) URL (see
+   * {@link isSafeHttpUrl}) at every point it is stored and again before it is
+   * rendered.
+   */
+  previewUrl?: string;
   /** Failure detail, set when the job reaches `patch.failed`. */
   error?: string;
   /** ISO 8601 timestamps. */

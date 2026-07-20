@@ -88,6 +88,39 @@ describe('patch-worker success-path CAS', () => {
     expect(generatedNote).not.toContain('repair attempt');
   });
 
+  it('persists userSummary onto the job at pr.opened when the pipeline returns it', async () => {
+    const store = new MemoryStore();
+    const { job } = await seedQueuedJob(store);
+    const config = makeConfig(store, {});
+    const withSummary = createFakePipeline({
+      ok: true,
+      branch: 'patchback/job-x',
+      prNumber: 909,
+      prUrl: 'https://github.com/acme/demo/pull/909',
+      userSummary: 'The button now says Submit instead of Sumbit.',
+      repairAttempts: 0,
+    });
+    await runPatchTask(config, withSummary, { type: 'patch', jobId: job.id });
+    const after = await store.getJob(job.id);
+    expect(after?.state).toBe('pr.opened');
+    expect(after?.userSummary).toBe(
+      'The button now says Submit instead of Sumbit.',
+    );
+  });
+
+  it('leaves userSummary absent when the pipeline returns none (byte-identical)', async () => {
+    const store = new MemoryStore();
+    const { job } = await seedQueuedJob(store);
+    const config = makeConfig(store, {});
+    await runPatchTask(config, createFakePipeline(), {
+      type: 'patch',
+      jobId: job.id,
+    });
+    const after = await store.getJob(job.id);
+    expect(after?.state).toBe('pr.opened');
+    expect(after !== undefined && 'userSummary' in after).toBe(false);
+  });
+
   it('records the repair attempt count in the job history note', async () => {
     const store = new MemoryStore();
     const { job } = await seedQueuedJob(store);

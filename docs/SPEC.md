@@ -92,6 +92,27 @@ Invalid transitions throw. `packages/types` is the single source of truth.
    widget/SDK accept such a token (and a refresh callback that re-fetches it
    from the app's OWN backend — never from Patchback). Long-lived direct keys
    remain fully supported and unchanged for the internal-app path.
+9. **Preview links are surfaced, not gated (v0.2).** The feedback outcome view
+   can show a "Preview this change" link and a plain-language change summary to
+   the item's read-token holder (and owner/insider keys) through the UNCHANGED
+   `GET /jobs/:id/status` read gate — outsider feedback never produces a job or
+   PR, so it has neither. The preview URL is your OWN preview provider's URL
+   (Vercel/Netlify/Cloudflare/…), relayed from the GitHub Deployments API;
+   Patchback does not provision preview environments and only ever surfaces
+   NON-production deployments whose URL is a validated `http(s)` URL (three
+   independent scheme checks: at the read method, at storage, and before the
+   widget sets the `href`). Patchback does NOT change the reachability of that
+   URL — if your previews must stay private, configure preview-environment
+   protection (e.g. Vercel deployment protection); Patchback surfaces whatever
+   URL your provider posts and does not add a gate (suppressing a URL already
+   exposed on the PR the host opened would be security theater). The hosted
+   path reads the URL from the inbound `deployment_status` webhook PAYLOAD only
+   — the webhook has no GitHub client and never calls GitHub back, so no merge
+   or write power is introduced. The plain-language summary is agent OUTPUT
+   rendered as display-only text (a DOM text node, never HTML), never read back
+   into any pipeline. Surfacing needs the token's optional `Deployments (read)`
+   permission; without it, previews simply never appear (everything else
+   works).
 
 ## Local-first constraint
 

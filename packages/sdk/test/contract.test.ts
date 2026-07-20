@@ -184,11 +184,47 @@ describe('SDK ↔ API contract', () => {
     expect(done.prNumber).toBeTypeOf('number');
     expect(done.prUrl).toContain('/pull/');
     expect(done.branchName).toContain('patchback/');
+    // Additive/absent-safe: with no summary/preview produced, neither field
+    // appears — the DTO is byte-identical to today.
+    expect(done.userSummary).toBeUndefined();
+    expect(done.previewUrl).toBeUndefined();
     // Double start → 409 invalid_state.
     await expect(client.startJob(submitted.jobId)).rejects.toMatchObject({
       status: 409,
       code: 'invalid_state',
     });
+  });
+
+  it('round-trips userSummary + previewUrl to the read-token holder when present', async () => {
+    const world = await makeWorld([{ classification: 'patchable' }]);
+    const client = createPatchbackClient({
+      baseUrl: world.baseUrl,
+      apiKey: INSIDER_KEY,
+    });
+    const submitted = await client.submitFeedback({
+      message: 'The button says Sumbit',
+    });
+    await world.queue.onIdle();
+
+    // Simulate the outcome the poller/webhook would write onto the job.
+    const job = await world.store.getJobByFeedbackId(submitted.id);
+    expect(job).toBeDefined();
+    const withOutcome = {
+      ...(job as NonNullable<typeof job>),
+      userSummary: 'The button now reads Submit instead of Sumbit.',
+      previewUrl: 'https://preview.example.com/pr/1',
+    };
+    expect(await world.store.updateJob(withOutcome, withOutcome.state)).toBe(
+      true,
+    );
+
+    const status = await client.getJobStatus(submitted.jobId, {
+      readToken: submitted.readToken,
+    });
+    expect(status.userSummary).toBe(
+      'The button now reads Submit instead of Sumbit.',
+    );
+    expect(status.previewUrl).toBe('https://preview.example.com/pr/1');
   });
 
   it('enforces the tier gates: keyless startJob is unrepresentable, outsider items are data only', async () => {

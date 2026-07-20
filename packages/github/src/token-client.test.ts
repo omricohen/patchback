@@ -423,3 +423,119 @@ describe('getPullRequestStatus', () => {
     expect((await gh.getPullRequestStatus(7)).state).toBe('closed');
   });
 });
+
+describe('getPreviewDeploymentUrl', () => {
+  const SHA = 'head-sha';
+  const deploymentsKey = `GET ${BASE}/deployments`;
+  const statusesKey = (id: number): string =>
+    `GET ${BASE}/deployments/${id}/statuses`;
+
+  it('returns the newest successful non-production preview environment_url (read-only, GET-only)', async () => {
+    const { client: gh, requests } = client({
+      [deploymentsKey]: {
+        body: [
+          { id: 1, environment: 'Preview', created_at: '2026-07-20T10:00:00Z' },
+          { id: 2, environment: 'preview', created_at: '2026-07-20T12:00:00Z' },
+        ],
+      },
+      [statusesKey(2)]: {
+        body: [
+          { state: 'success', environment_url: 'https://newest.preview.app' },
+        ],
+      },
+      [statusesKey(1)]: {
+        body: [
+          { state: 'success', environment_url: 'https://older.preview.app' },
+        ],
+      },
+    });
+    expect(await gh.getPreviewDeploymentUrl(SHA)).toBe(
+      'https://newest.preview.app',
+    );
+    // Surface-don't-provision: it must only READ (GET) — never POST/PATCH a
+    // deployment or anything else.
+    expect(requests.every((r) => r.method === 'GET')).toBe(true);
+  });
+
+  it('ignores production deployments', async () => {
+    const { client: gh } = client({
+      [deploymentsKey]: {
+        body: [
+          {
+            id: 9,
+            environment: 'production',
+            created_at: '2026-07-20T12:00:00Z',
+          },
+        ],
+      },
+    });
+    expect(await gh.getPreviewDeploymentUrl(SHA)).toBeUndefined();
+  });
+
+  it('returns undefined when there are no deployments', async () => {
+    const { client: gh } = client({ [deploymentsKey]: { body: [] } });
+    expect(await gh.getPreviewDeploymentUrl(SHA)).toBeUndefined();
+  });
+
+  it('returns undefined when the latest status is pending (no success yet)', async () => {
+    const { client: gh } = client({
+      [deploymentsKey]: {
+        body: [
+          { id: 1, environment: 'preview', created_at: '2026-07-20T10:00:00Z' },
+        ],
+      },
+      [statusesKey(1)]: {
+        body: [{ state: 'pending', environment_url: 'https://not-ready.app' }],
+      },
+    });
+    expect(await gh.getPreviewDeploymentUrl(SHA)).toBeUndefined();
+  });
+
+  it('returns undefined when the deploy failed', async () => {
+    const { client: gh } = client({
+      [deploymentsKey]: {
+        body: [
+          { id: 1, environment: 'preview', created_at: '2026-07-20T10:00:00Z' },
+        ],
+      },
+      [statusesKey(1)]: {
+        body: [{ state: 'failure', environment_url: 'https://broken.app' }],
+      },
+    });
+    expect(await gh.getPreviewDeploymentUrl(SHA)).toBeUndefined();
+  });
+
+  it('rejects a non-http(s) environment_url', async () => {
+    const { client: gh } = client({
+      [deploymentsKey]: {
+        body: [
+          { id: 1, environment: 'preview', created_at: '2026-07-20T10:00:00Z' },
+        ],
+      },
+      [statusesKey(1)]: {
+        body: [{ state: 'success', environment_url: 'javascript:alert(1)' }],
+      },
+    });
+    expect(await gh.getPreviewDeploymentUrl(SHA)).toBeUndefined();
+  });
+
+  it('falls through to an older preview when the newest has no usable url', async () => {
+    const { client: gh } = client({
+      [deploymentsKey]: {
+        body: [
+          { id: 1, environment: 'preview', created_at: '2026-07-20T10:00:00Z' },
+          { id: 2, environment: 'preview', created_at: '2026-07-20T12:00:00Z' },
+        ],
+      },
+      [statusesKey(2)]: { body: [{ state: 'pending' }] },
+      [statusesKey(1)]: {
+        body: [
+          { state: 'success', environment_url: 'https://older.preview.app' },
+        ],
+      },
+    });
+    expect(await gh.getPreviewDeploymentUrl(SHA)).toBe(
+      'https://older.preview.app',
+    );
+  });
+});

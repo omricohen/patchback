@@ -5,9 +5,11 @@ import {
   InvalidJobTransitionError,
   JOB_STATES,
   JOB_STATE_TRANSITIONS,
+  MAX_URL_LENGTH,
   assertTransition,
   canTransition,
   isJobState,
+  isSafeHttpUrl,
   isTerminalJobState,
   nextJobStates,
   transitionJob,
@@ -272,6 +274,87 @@ describe('transitionJob', () => {
     for (const to of JOB_STATES) {
       expect(() => transitionJob(job, to)).toThrow(InvalidJobTransitionError);
     }
+  });
+});
+
+describe('isSafeHttpUrl', () => {
+  it.each([
+    'http://example.com',
+    'https://example.com',
+    'https://preview-abc.vercel.app/',
+    'https://preview.netlify.app/path?x=1#frag',
+    'HTTP://EXAMPLE.COM',
+  ])('accepts %s', (url) => {
+    expect(isSafeHttpUrl(url)).toBe(true);
+  });
+
+  it.each([
+    'javascript:alert(1)',
+    'data:text/html,<script>alert(1)</script>',
+    'file:///etc/passwd',
+    'ftp://example.com',
+    'vbscript:msgbox(1)',
+    '//example.com',
+    'example.com',
+    '/relative/path',
+    '',
+    '   ',
+    // Embedded credentials: leak secrets into an anchor and can disguise the
+    // real host from the reader.
+    'https://user:pass@example.com/preview',
+    'http://user@example.com/preview',
+  ])('rejects %s', (url) => {
+    expect(isSafeHttpUrl(url)).toBe(false);
+  });
+
+  it('rejects non-string values', () => {
+    expect(isSafeHttpUrl(undefined)).toBe(false);
+    expect(isSafeHttpUrl(null)).toBe(false);
+    expect(isSafeHttpUrl(42)).toBe(false);
+    expect(isSafeHttpUrl({ href: 'https://x.com' })).toBe(false);
+  });
+
+  it('rejects a URL longer than the cap', () => {
+    const tooLong = `https://example.com/${'a'.repeat(MAX_URL_LENGTH)}`;
+    expect(tooLong.length).toBeGreaterThan(MAX_URL_LENGTH);
+    expect(isSafeHttpUrl(tooLong)).toBe(false);
+  });
+});
+
+describe('Job additive outcome fields (userSummary, previewUrl)', () => {
+  const baseJob: Job = {
+    id: 'job_1',
+    feedbackId: 'fb_1',
+    state: 'pr.opened',
+    history: [],
+    createdAt: '2026-07-10T00:00:00.000Z',
+    updatedAt: '2026-07-10T00:00:00.000Z',
+  };
+
+  it('are absent by default — a job without them is byte-identical to today', () => {
+    expect('userSummary' in baseJob).toBe(false);
+    expect('previewUrl' in baseJob).toBe(false);
+    expect(JSON.stringify(baseJob)).toBe(
+      JSON.stringify({
+        id: 'job_1',
+        feedbackId: 'fb_1',
+        state: 'pr.opened',
+        history: [],
+        createdAt: '2026-07-10T00:00:00.000Z',
+        updatedAt: '2026-07-10T00:00:00.000Z',
+      }),
+    );
+  });
+
+  it('are carried through transitionJob untouched when present', () => {
+    const withOutcome: Job = {
+      ...baseJob,
+      userSummary: 'Made the button say Save.',
+      previewUrl: 'https://preview.example.com/',
+    };
+    const next = transitionJob(withOutcome, 'pr.reviewed');
+    expect(next.userSummary).toBe('Made the button say Save.');
+    expect(next.previewUrl).toBe('https://preview.example.com/');
   });
 });
 

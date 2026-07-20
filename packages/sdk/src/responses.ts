@@ -63,6 +63,18 @@ export interface JobStatusResponse {
   branchName?: string;
   prNumber?: number;
   prUrl?: string;
+  /**
+   * Plain-language, non-technical summary of the change for the submitter.
+   * Present only when the agent produced one; DISPLAY-only text — render it as
+   * a text node, never innerHTML.
+   */
+  userSummary?: string;
+  /**
+   * The host's OWN preview deployment URL for this change, if its preview
+   * system published one. Absent for hosts without previews. Validated
+   * http(s) by the server; re-validate before using it as an href.
+   */
+  previewUrl?: string;
   error?: string;
 }
 

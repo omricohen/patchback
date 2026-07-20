@@ -62,6 +62,8 @@ export const jobs = pgTable(
     branchName: text('branch_name'),
     prNumber: integer('pr_number'),
     prUrl: text('pr_url'),
+    userSummary: text('user_summary'),
+    previewUrl: text('preview_url'),
     error: text('error'),
     createdAt: timestamp('created_at', {
       withTimezone: true,
@@ -75,6 +77,7 @@ export const jobs = pgTable(
   (table) => [
     index('jobs_feedback_id_idx').on(table.feedbackId),
     index('jobs_pr_number_idx').on(table.prNumber),
+    index('jobs_branch_name_idx').on(table.branchName),
     check(
       'jobs_state_check',
       sql`${table.state} in (

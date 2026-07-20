@@ -1,4 +1,5 @@
 import type { FeedbackThreadResponse, JobStatusResponse } from '@patchback/sdk';
+import { isSafeHttpUrl } from '@patchback/types';
 
 import { presentState } from '../status-map.js';
 import { h, clear } from './dom.js';
@@ -75,9 +76,38 @@ export function renderThread(
                 [`PR #${status.prNumber ?? ''}`],
               )
             : undefined,
+          // "Preview this change" — only when previewUrl is a safe http(s)
+          // URL (never trust the wire: setAttribute would set a
+          // javascript:/data: href verbatim). No auto-navigation — a
+          // user-clicked anchor, hardened with rel="noopener noreferrer".
+          status.previewUrl !== undefined && isSafeHttpUrl(status.previewUrl)
+            ? h(
+                'a',
+                {
+                  className: 'pb-preview-link',
+                  href: status.previewUrl,
+                  target: '_blank',
+                  rel: 'noreferrer noopener',
+                },
+                ['Preview this change'],
+              )
+            : undefined,
         ].filter((c): c is HTMLElement => c !== undefined),
       ),
     );
+
+    // Plain-language "AI comment": the non-technical summary of what changed.
+    // XSS-safe by construction — the summary is a STRING child, so h() appends
+    // it as a TEXT NODE (never innerHTML). This is agent OUTPUT shown to a
+    // human; it is display-only and never re-enters any pipeline.
+    if (status.userSummary !== undefined && status.userSummary !== '') {
+      children.push(
+        h('div', { className: 'pb-ai-summary', role: 'note' }, [
+          h('strong', {}, ['What changed']),
+          h('p', {}, [status.userSummary]),
+        ]),
+      );
+    }
   }
 
   if (state.connectionLost) {

@@ -131,11 +131,13 @@ describe('renderWorkflow — least-privilege, HMAC-gated, no auto-merge', () => 
     expect(doc.name).toBe('Patchback');
     expect(doc.on.issues.types).toEqual(['labeled']);
 
-    // EXACTLY the three write scopes — nothing else (least privilege).
+    // EXACTLY the three write scopes plus one READ-ONLY scope (deployments,
+    // to surface the host's own preview URL) — nothing else (least privilege).
     expect(doc.permissions).toEqual({
       contents: 'write',
       issues: 'write',
       'pull-requests': 'write',
+      deployments: 'read',
     });
 
     expect(doc.concurrency.group).toContain('github.event.issue.number');

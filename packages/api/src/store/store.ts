@@ -36,6 +36,14 @@ export interface Store {
   /** Webhook correlation: the job whose PR number matches. */
   getJobByPrNumber(prNumber: number): Promise<Job | undefined>;
   /**
+   * Webhook correlation for `deployment_status` events: the job whose working
+   * branch matches. Patch branches are deterministic
+   * (`patchback/job-<id>`), so the deployment's `ref` correlates to a job
+   * WITHOUT any outbound GitHub call — preserving the webhook's no-client
+   * boundary.
+   */
+  getJobByBranchName(branchName: string): Promise<Job | undefined>;
+  /**
    * Compare-and-swap: persist `job` only if the STORED state still equals
    * `expectedState`. Returns false on conflict (no write happened).
    */

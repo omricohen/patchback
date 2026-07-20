@@ -313,5 +313,33 @@ describe('createClaudeCodeAdapter', () => {
       const summary = await adapter.summarize(ctx);
       expect(summary.body).toMatch(/diff too large/i);
     });
+
+    it('captures the plain-language userSummary from the sentinel line', async () => {
+      const adapter = fakeAdapter('label-change', {
+        env: {
+          FAKE_CLAUDE_USER_SUMMARY:
+            'The button now says Submit changes instead of Save changes.',
+        },
+      });
+      const ctx = makeContext();
+      await adapter.prepare(ctx);
+      await adapter.execute(ctx);
+      const summary = await adapter.summarize(ctx);
+      expect(summary.userSummary).toBe(
+        'The button now says Submit changes instead of Save changes.',
+      );
+      // Never leaks into the technical body.
+      expect(summary.body).not.toContain('PATCHBACK_USER_SUMMARY');
+    });
+
+    it('leaves userSummary absent when the agent omits the sentinel', async () => {
+      const adapter = fakeAdapter('label-change');
+      const ctx = makeContext();
+      await adapter.prepare(ctx);
+      await adapter.execute(ctx);
+      const summary = await adapter.summarize(ctx);
+      expect(summary.userSummary).toBeUndefined();
+      expect('userSummary' in summary).toBe(false);
+    });
   });
 });

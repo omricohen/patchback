@@ -104,6 +104,29 @@ describe('probeGitHubToken — readable bad-token failures', () => {
     );
     expect(probe).toEqual({ ok: true, warnings: [] });
   });
+
+  it('warns (non-fatally) when Deployments read is missing, but still passes', async () => {
+    const probe = await probeGitHubToken(
+      options(
+        fakeFetch((url) =>
+          url.includes('/deployments')
+            ? { status: 403 }
+            : {
+                status: 200,
+                body: {
+                  permissions: { push: true, pull: true },
+                  has_issues: true,
+                },
+              },
+        ),
+      ),
+    );
+    expect(probe.ok).toBe(true);
+    if (probe.ok) {
+      expect(probe.warnings.join('\n')).toContain('Deployments (read)');
+      expect(probe.warnings.join('\n')).toContain('preview links');
+    }
+  });
 });
 
 describe('probeRepoScripts — "no test script" is a clear message', () => {

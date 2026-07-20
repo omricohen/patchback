@@ -353,7 +353,11 @@ export async function runCi(options: RunCiOptions): Promise<CiResult> {
   if (finalJob?.state === 'pr.opened' && finalJob.prUrl !== undefined) {
     await githubClient.createIssueComment({
       issueNumber,
-      body: renderPatchedComment(finalJob.prNumber, finalJob.prUrl),
+      body: renderPatchedComment(
+        finalJob.prNumber,
+        finalJob.prUrl,
+        finalJob.userSummary,
+      ),
     });
     return {
       outcome: 'patched',
@@ -403,11 +407,24 @@ function renderNeedsHumanComment(): string {
 function renderPatchedComment(
   prNumber: number | undefined,
   prUrl: string,
+  userSummary?: string,
 ): string {
   const ref = prNumber !== undefined ? `#${prNumber}` : 'a pull request';
-  return [`**Patchback opened ${ref}**`, '', prUrl, '', NEVER_MERGES].join(
-    '\n',
+  const parts = [`**Patchback opened ${ref}**`, '', prUrl];
+  // Plain-language summary is available the moment the PR opens (same run).
+  if (userSummary !== undefined && userSummary !== '') {
+    parts.push('', `**What changed:** ${userSummary}`);
+  }
+  // A one-shot Action cannot WAIT for the deploy, so we do not fabricate a
+  // preview URL — we set the expectation honestly: the host's own preview bot
+  // posts the link on the PR when the deploy finishes.
+  parts.push(
+    '',
+    'A preview link will appear on the pull request once your deploy provider finishes building it.',
+    '',
+    NEVER_MERGES,
   );
+  return parts.join('\n');
 }
 
 function renderFailureComment(error: string): string {

@@ -1,3 +1,5 @@
+import { isSafeHttpUrl } from '@patchback/types';
+
 import { GitHubApiError } from './errors.js';
 import type {
   BranchRef,
@@ -191,6 +193,54 @@ class TokenGitHubClient implements GitHubClient {
     };
   }
 
+  async getPreviewDeploymentUrl(headSha: string): Promise<string | undefined> {
+    // READ-ONLY. List deployments for the head sha, newest first, then read
+    // each one's latest status. Surface the newest NON-production preview
+    // whose latest status is `success` and carries a safe http(s)
+    // environment_url. Never creates or mutates a deployment.
+    const deployments = await this.request<
+      Array<{
+        id: number;
+        environment?: string | null;
+        created_at?: string;
+      }>
+    >(
+      'GET',
+      this.repoPath(
+        `/deployments?sha=${encodeURIComponent(headSha)}&per_page=30`,
+      ),
+    );
+    if (!Array.isArray(deployments) || deployments.length === 0) {
+      return undefined;
+    }
+
+    // Non-production only (case-insensitive; the label is provider-chosen,
+    // e.g. `Preview`, `preview`). All-production ⇒ no preview to surface.
+    const previews = deployments.filter(
+      (d) => !isProductionEnvironment(d.environment),
+    );
+    // Newest first by created_at (fall back to id order when timestamps tie).
+    previews.sort((a, b) => compareCreatedAtDesc(a.created_at, b.created_at));
+
+    for (const deployment of previews) {
+      const statuses = await this.request<
+        Array<{ state?: string; environment_url?: string | null }>
+      >(
+        'GET',
+        this.repoPath(`/deployments/${deployment.id}/statuses?per_page=1`),
+      );
+      const latest = Array.isArray(statuses) ? statuses[0] : undefined;
+      if (latest === undefined || latest.state !== 'success') {
+        continue;
+      }
+      const url = latest.environment_url;
+      if (isSafeHttpUrl(url)) {
+        return url;
+      }
+    }
+    return undefined;
+  }
+
   private repoPath(suffix: string): string {
     return `/repos/${this.repo.owner}/${this.repo.repo}${suffix}`;
   }
@@ -254,6 +304,25 @@ class TokenGitHubClient implements GitHubClient {
     }
     return (await response.json()) as T;
   }
+}
+
+/** True for the `production` environment (case-insensitive); false otherwise. */
+function isProductionEnvironment(
+  environment: string | null | undefined,
+): boolean {
+  return (environment ?? '').trim().toLowerCase() === 'production';
+}
+
+/** Sort comparator: newest `created_at` first; missing timestamps sort last. */
+function compareCreatedAtDesc(
+  a: string | undefined,
+  b: string | undefined,
+): number {
+  const at = a !== undefined ? Date.parse(a) : NaN;
+  const bt = b !== undefined ? Date.parse(b) : NaN;
+  const av = Number.isNaN(at) ? -Infinity : at;
+  const bv = Number.isNaN(bt) ? -Infinity : bt;
+  return bv - av;
 }
 
 function toTreeEntry(file: FileChange): TreeEntry {

@@ -4,6 +4,8 @@ import type {
   TaskBrief,
 } from '@patchback/agent-core';
 
+import { USER_SUMMARY_SENTINEL } from './result.js';
+
 /**
  * Build the headless prompt sent to the Claude Code CLI from a structured
  * task brief plus the target repo's conventions.
@@ -91,6 +93,20 @@ export function buildPrompt(
     }
     lines.push('');
   }
+
+  // Final step: ask for a plain-language summary line for the feedback
+  // submitter. Kept UNCONDITIONAL (including on a repair re-run) so the last
+  // output always describes the final state of the change. Best-effort — if
+  // it is omitted, the summary is simply absent (never fabricated).
+  lines.push(
+    '## Final step (required)',
+    'After making the change, output ONE final line in exactly this form, and',
+    'nothing after it — a plain-language, non-technical summary of WHAT changed',
+    'and why it addresses the request, for the non-technical person who reported',
+    'it. No file names, no code, no jargon, one or two sentences:',
+    `${USER_SUMMARY_SENTINEL} <your one or two plain sentences here>`,
+    '',
+  );
 
   return lines.join('\n');
 }

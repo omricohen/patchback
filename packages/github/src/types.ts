@@ -140,4 +140,19 @@ export interface GitHubClient {
   commitFiles(input: CommitFilesInput): Promise<CommitRef>;
   openPullRequest(input: OpenPullRequestInput): Promise<PullRequestRef>;
   getPullRequestStatus(pullNumber: number): Promise<PullRequestStatus>;
+  /**
+   * Latest preview deployment URL for a PR head sha, or `undefined`.
+   *
+   * READ-ONLY, surface-don't-provision: lists the repo's deployments for
+   * `headSha`, reads each one's latest STATUS, and returns the newest
+   * `status.environment_url` whose deployment `environment` is NOT
+   * `production` and whose latest status is `success`. It NEVER creates or
+   * mutates a deployment — Patchback surfaces the host's OWN preview system's
+   * URL and provisions nothing. Returns `undefined` when no preview exists
+   * yet, the deploy is pending/failed, every environment is production, or the
+   * URL is not a safe http(s) URL. Needs the fine-grained token's
+   * `Deployments: read` permission; without it, previews simply never appear
+   * (graceful absence).
+   */
+  getPreviewDeploymentUrl(headSha: string): Promise<string | undefined>;
 }

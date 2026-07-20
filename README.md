@@ -94,6 +94,31 @@ Uncertain feedback never reaches the agent: the triage step classifies it
 `needs_human` instead. Submissions without an API key are `outsider` tier —
 stored as data, never turned into instructions.
 
+### The outcome view: a non-technical summary + a preview link
+
+The person who submitted the feedback sees, in the widget thread, a
+non-technical account of what their feedback became — not a diff:
+
+- **Plain-language summary.** When the agent opens a PR it also writes a
+  one- or two-sentence, jargon-free summary of what changed and why it
+  addresses the feedback. It renders as a short "What changed" note in the
+  thread (and, in Action mode, in the outcome comment on the issue). It is
+  best-effort: if the agent doesn't produce one, nothing extra renders — it is
+  never fabricated.
+- **"Preview this change" link.** If your repo already has a preview-deploy
+  provider (Vercel, Netlify, Cloudflare Pages, …), Patchback surfaces the
+  preview URL that provider publishes to GitHub — it does **not** create
+  preview environments. The link appears once your deploy finishes (seconds to
+  minutes after the PR opens). This needs the token's optional
+  **`Deployments: read`** permission; without it, everything else works and the
+  link simply never appears.
+
+Both are shown only to the same audience that already sees the job's status for
+that item (the submitter's read token, or an owner/insider key). Preview links
+are your existing provider's URLs — if your previews must stay private, use your
+provider's preview-environment protection; Patchback relays the URL, it does not
+gate it.
+
 ### Public-facing apps: per-user token exchange
 
 The dev quickstart above ships the embedding app's `apiKey` to the page. That is

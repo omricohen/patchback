@@ -110,6 +110,17 @@ export class MemoryStore implements Store {
     return structuredClone(job);
   }
 
+  async getJobByBranchName(branchName: string): Promise<Job | undefined> {
+    const job = [...this.jobs.values()].find(
+      (candidate) => candidate.branchName === branchName,
+    );
+    if (job === undefined) {
+      return undefined;
+    }
+    this.assertJobState(job);
+    return structuredClone(job);
+  }
+
   async updateJob(job: Job, expectedState: JobState): Promise<boolean> {
     const stored = this.jobs.get(job.id);
     if (stored === undefined) {

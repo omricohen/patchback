@@ -38,6 +38,8 @@ const baseJobRow = {
   branchName: null,
   prNumber: null,
   prUrl: null,
+  userSummary: null,
+  previewUrl: null,
   error: null,
   createdAt: new Date('2026-07-10T00:00:00.000Z'),
   updatedAt: new Date('2026-07-10T00:00:00.000Z'),
@@ -92,10 +94,20 @@ describe('drizzle row mapping (fail closed on corruption)', () => {
       ],
       prNumber: 42,
       prUrl: 'https://github.com/acme/demo/pull/42',
+      userSummary: 'The button now reads Submit.',
+      previewUrl: 'https://preview.example.com/pr/42',
     });
     expect(job.state).toBe('pr.opened');
     expect(job.prNumber).toBe(42);
+    expect(job.userSummary).toBe('The button now reads Submit.');
+    expect(job.previewUrl).toBe('https://preview.example.com/pr/42');
     expect(job.error).toBeUndefined();
+  });
+
+  it('omits userSummary/previewUrl when the columns are null (byte-identical)', () => {
+    const job = mapJobRow({ ...baseJobRow, state: 'pr.opened' });
+    expect('userSummary' in job).toBe(false);
+    expect('previewUrl' in job).toBe(false);
   });
 
   it('throws StoreIntegrityError on a corrupted job state — never coerces toward runnable', () => {

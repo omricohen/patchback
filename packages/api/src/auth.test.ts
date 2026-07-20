@@ -173,6 +173,7 @@ function baseConfig(overrides: Partial<ApiConfig> = {}): ApiConfig {
         headSha: '',
         url: '',
       }),
+      getPreviewDeploymentUrl: async () => undefined,
     },
     pipeline: {
       run: async () => ({ ok: false, error: 'unused', repairAttempts: 0 }),

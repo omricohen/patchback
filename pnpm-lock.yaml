@@ -200,7 +200,11 @@ importers:
         specifier: workspace:*
         version: link:../sdk
 
-  packages/github: {}
+  packages/github:
+    dependencies:
+      '@patchback/types':
+        specifier: workspace:*
+        version: link:../types
 
   packages/provenance:
     dependencies:
