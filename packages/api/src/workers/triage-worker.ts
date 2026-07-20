@@ -40,6 +40,7 @@ export async function runTriageTask(
       : {}),
     ...(thread !== undefined ? { thread } : {}),
     ...(config.now !== undefined ? { now: config.now } : {}),
+    ...(config.repoProbe !== undefined ? { repoProbe: config.repoProbe } : {}),
   });
 
   await store.setTriage(item.id, result);

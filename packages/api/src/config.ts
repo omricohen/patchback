@@ -1,6 +1,6 @@
 import type { AgentAdapter } from '@patchback/agent-core';
 import type { GitHubClient } from '@patchback/github';
-import type { ModelCaller } from '@patchback/triage';
+import type { ModelCaller, RepoProbe } from '@patchback/triage';
 import {
   canInitiatePatchJob,
   isTrustTier,
@@ -82,6 +82,16 @@ export interface ApiConfig {
   log?: (message: string) => void;
   /** Triage demotion gate, default 0.7 (see @patchback/triage). */
   confidenceThreshold?: number;
+  /**
+   * OPTIONAL repo-aware triage stage 2. When set, borderline stage-1 results
+   * are re-classified against a deterministic fixed-string probe of a repo
+   * working copy (paths + counts only). Only wired where a real on-disk
+   * checkout exists at triage time — the CLI's `LocalRepoProbe` over
+   * `localRepoPath`. The hosted API worker has no working copy at triage time
+   * (the clone happens later, per-patchable-item), so it NEVER sets this and
+   * stage 2 is fail-safe dead code there. See @patchback/triage `RepoProbe`.
+   */
+  repoProbe?: RepoProbe;
   /** Constraints stamped into every task brief. */
   briefConstraints?: readonly string[];
   /** Clock injection for deterministic tests. */
