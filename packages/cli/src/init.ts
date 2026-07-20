@@ -1,5 +1,6 @@
+import { randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { appendFile, readFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import {
@@ -12,6 +13,7 @@ import { upsertDotEnv } from './env.js';
 import { CliError } from './errors.js';
 import { probeGitHubToken, probeRepoScripts } from './github-probe.js';
 import { createPrompter } from './prompts.js';
+import { renderWorkflow } from './workflow-template.js';
 
 /**
  * Interactive first run: collect the GitHub token, the Anthropic API key,
@@ -199,6 +201,138 @@ export async function runInit(options: InitOptions): Promise<InitResult> {
     say('Next: `patchback dev`');
 
     return { configPath: writtenConfigPath, envPath, config, warnings };
+  } finally {
+    prompter.close();
+  }
+}
+
+export interface InitGithubActionOptions {
+  cwd: string;
+  input: NodeJS.ReadableStream;
+  output: NodeJS.WritableStream;
+  /** Overwrite an existing workflow file. */
+  force?: boolean;
+  /** Inject the generated signing secret (tests); default: fresh random. */
+  signingSecret?: string;
+}
+
+export interface InitGithubActionResult {
+  configPath: string;
+  workflowPath: string;
+  /**
+   * The freshly minted signing secret. Returned so callers/tests can confirm
+   * it is printed ONCE and written to NO file. It is NEVER stored on disk.
+   */
+  signingSecret: string;
+  warnings: string[];
+}
+
+/**
+ * `patchback init --github-action`: scaffold Action mode into the CURRENT
+ * repo. Writes the non-secret `patchback.config.ts` (reused writer) and
+ * `.github/workflows/patchback.yml`, generates a fresh `PATCHBACK_SIGNING_SECRET`,
+ * prints it ONCE with `gh secret set` instructions, and writes NO secret files
+ * (secrets live only as GitHub repo secrets). The same signing secret must be
+ * configured in the ingest — both sides share the symmetric HMAC key.
+ */
+export async function runInitGithubAction(
+  options: InitGithubActionOptions,
+): Promise<InitGithubActionResult> {
+  const { cwd, output } = options;
+  const configPath = path.join(cwd, CONFIG_FILE_NAME);
+  if (existsSync(configPath) && options.force !== true) {
+    throw new CliError(
+      `${CONFIG_FILE_NAME} already exists in ${cwd}. ` +
+        'Re-run with --force to overwrite it.',
+    );
+  }
+
+  const prompter = createPrompter(options.input, output);
+  const say = (line: string): void => {
+    output.write(`${line}\n`);
+  };
+  const warnings: string[] = [];
+
+  try {
+    say(
+      'Patchback GitHub Action setup. This writes a workflow + settings file',
+    );
+    say(
+      'to THIS repo. Secrets are NEVER written to a file — they go to GitHub',
+    );
+    say('repo secrets, printed once below.');
+    say('');
+
+    // --- Target repo (this repo, on GitHub) --------------------------------
+    let repoAnswer = '';
+    for (;;) {
+      repoAnswer = await prompter.ask(
+        'GitHub repository this Action runs in (owner/name)',
+      );
+      try {
+        parseRepoRef(repoAnswer);
+        break;
+      } catch (error) {
+        say(`  ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    const repo = parseRepoRef(repoAnswer);
+
+    const baseBranch = await prompter.ask('Base branch PRs should target', {
+      defaultValue: 'main',
+    });
+    const testCommandsAnswer = await prompter.ask(
+      'How does the repo run its tests? (comma-separated; the pipeline runs ' +
+        'the repo’s own package.json scripts)',
+      { defaultValue: 'npm test' },
+    );
+    const testCommands = testCommandsAnswer
+      .split(',')
+      .map((command) => command.trim())
+      .filter((command) => command !== '');
+
+    // --- Write config + workflow (no secrets) ------------------------------
+    const config: PatchbackConfig = {
+      repo: `${repo.owner}/${repo.name}`,
+      testCommands,
+      baseBranch,
+    };
+    const writtenConfigPath = await writeConfigFile(cwd, config);
+
+    const workflowDir = path.join(cwd, '.github', 'workflows');
+    await mkdir(workflowDir, { recursive: true });
+    const workflowPath = path.join(workflowDir, 'patchback.yml');
+    await writeFile(workflowPath, renderWorkflow(), 'utf8');
+
+    // --- Signing secret: minted, printed ONCE, never written to a file ------
+    const signingSecret =
+      options.signingSecret ?? randomBytes(32).toString('hex');
+
+    say('');
+    say(`Wrote ${writtenConfigPath} (settings — no secrets inside).`);
+    say(`Wrote ${workflowPath} (least-privilege workflow).`);
+    say('');
+    say('Set these two GitHub repo secrets (values are NOT stored on disk):');
+    say('');
+    say(`  gh secret set ANTHROPIC_API_KEY --repo ${config.repo}`);
+    say(`  gh secret set PATCHBACK_SIGNING_SECRET --repo ${config.repo}`);
+    say('');
+    say('PATCHBACK_SIGNING_SECRET (shown ONCE — copy it now, it will not be');
+    say('shown again, and configure the SAME value in your ingest):');
+    say('');
+    say(`  ${signingSecret}`);
+    say('');
+    say('Then submit feedback to your ingest, which opens a labeled patchback');
+    say(
+      'issue and triggers the workflow. Every PR still needs a human review.',
+    );
+
+    return {
+      configPath: writtenConfigPath,
+      workflowPath,
+      signingSecret,
+      warnings,
+    };
   } finally {
     prompter.close();
   }

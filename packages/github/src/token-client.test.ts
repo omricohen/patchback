@@ -146,6 +146,30 @@ describe('createIssue', () => {
   });
 });
 
+describe('createIssueComment', () => {
+  it('posts the comment body to the issue and returns the comment ref', async () => {
+    const { client: gh, requests } = client({
+      [`POST ${BASE}/issues/42/comments`]: {
+        status: 201,
+        body: {
+          id: 987,
+          html_url:
+            'https://github.com/acme/widgets/issues/42#issuecomment-987',
+        },
+      },
+    });
+    const comment = await gh.createIssueComment({
+      issueNumber: 42,
+      body: 'Patchback opened a PR.',
+    });
+    expect(comment).toEqual({
+      id: 987,
+      url: 'https://github.com/acme/widgets/issues/42#issuecomment-987',
+    });
+    expect(requests[0]!.body).toEqual({ body: 'Patchback opened a PR.' });
+  });
+});
+
 describe('createBranch', () => {
   it('resolves the default branch when `from` is omitted', async () => {
     const { client: gh, requests } = client({

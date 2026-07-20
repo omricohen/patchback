@@ -27,6 +27,18 @@ export interface IssueRef {
   url: string;
 }
 
+export interface CreateIssueCommentInput {
+  /** The issue (or PR) number to comment on. */
+  issueNumber: number;
+  body: string;
+}
+
+export interface IssueCommentRef {
+  id: number;
+  /** Human-facing URL (html_url). */
+  url: string;
+}
+
 export interface CreateBranchInput {
   /** New branch name (without the `refs/heads/` prefix). */
   branch: string;
@@ -117,6 +129,13 @@ export interface PullRequestStatus {
 export interface GitHubClient {
   readonly repo: RepoRef;
   createIssue(input: CreateIssueInput): Promise<IssueRef>;
+  /**
+   * Post a comment on an existing issue (or PR). Used by Action mode to write
+   * the triage/patch outcome back to the triggering issue — the durable
+   * thread in the stateless CI run. This is a status-back capability only;
+   * it grants NO merge power (see the no-merge invariant test).
+   */
+  createIssueComment(input: CreateIssueCommentInput): Promise<IssueCommentRef>;
   createBranch(input: CreateBranchInput): Promise<BranchRef>;
   commitFiles(input: CommitFilesInput): Promise<CommitRef>;
   openPullRequest(input: OpenPullRequestInput): Promise<PullRequestRef>;

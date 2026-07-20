@@ -65,6 +65,7 @@ function baseConfig(overrides: Partial<ApiConfig> = {}): ApiConfig {
     githubClient: {
       repo: { owner: 'acme', repo: 'demo' },
       createIssue: async () => ({ number: 1, title: '', url: '' }),
+      createIssueComment: async () => ({ id: 1, url: '' }),
       createBranch: async () => ({ branch: '', ref: '', sha: '' }),
       commitFiles: async () => ({ sha: '', message: '', url: '' }),
       openPullRequest: async () => ({

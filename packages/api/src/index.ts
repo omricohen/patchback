@@ -40,6 +40,22 @@ export {
   type PatchPipelineResult,
 } from './pipeline.js';
 export { verifyWebhookSignature } from './webhook-verify.js';
+export {
+  buildSignedIssueBody,
+  canonicalJson,
+  DEFAULT_MARKER_FRESHNESS_MS,
+  hashFeedbackContent,
+  ISSUE_MARKER_VERSION,
+  signIssueMarker,
+  verifyIssueMarker,
+  type BuildSignedIssueInput,
+  type IssueMarkerPayload,
+  type MarkerRejectReason,
+  type VerifyMarkerOptions,
+  type VerifyMarkerResult,
+} from './issue-marker.js';
 export { generateId, generateReadToken, hashReadToken } from './ids.js';
 export { minTrustTier } from './trust.js';
+export { runTriageTask } from './workers/triage-worker.js';
+export { runPatchTask } from './workers/patch-worker.js';
 export { DEFAULT_BRIEF_CONSTRAINTS } from './workers/patch-worker.js';

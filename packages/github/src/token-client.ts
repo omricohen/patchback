@@ -4,9 +4,11 @@ import type {
   CommitFilesInput,
   CommitRef,
   CreateBranchInput,
+  CreateIssueCommentInput,
   CreateIssueInput,
   FileChange,
   GitHubClient,
+  IssueCommentRef,
   IssueRef,
   OpenPullRequestInput,
   PullRequestRef,
@@ -81,6 +83,17 @@ class TokenGitHubClient implements GitHubClient {
       labels: input.labels,
     });
     return { number: issue.number, title: issue.title, url: issue.html_url };
+  }
+
+  async createIssueComment(
+    input: CreateIssueCommentInput,
+  ): Promise<IssueCommentRef> {
+    const comment = await this.request<{ id: number; html_url: string }>(
+      'POST',
+      this.repoPath(`/issues/${input.issueNumber}/comments`),
+      { body: input.body },
+    );
+    return { id: comment.id, url: comment.html_url };
   }
 
   async createBranch(input: CreateBranchInput): Promise<BranchRef> {
