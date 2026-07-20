@@ -3,8 +3,10 @@ import type {
   CommitFilesInput,
   CommitRef,
   CreateBranchInput,
+  CreateIssueCommentInput,
   CreateIssueInput,
   GitHubClient,
+  IssueCommentRef,
   IssueRef,
   OpenPullRequestInput,
   PullRequestRef,
@@ -71,6 +73,7 @@ export interface FakeGitHubClient extends GitHubClient {
   branches: CreateBranchInput[];
   commits: CommitFilesInput[];
   pullRequests: OpenPullRequestInput[];
+  comments: CreateIssueCommentInput[];
   /** Every method invocation in order, for the webhook zero-calls spy. */
   callLog: string[];
 }
@@ -82,6 +85,7 @@ export function createFakeGitHubClient(
   const branches: CreateBranchInput[] = [];
   const commits: CommitFilesInput[] = [];
   const pullRequests: OpenPullRequestInput[] = [];
+  const comments: CreateIssueCommentInput[] = [];
   const callLog: string[] = [];
   return {
     repo,
@@ -89,6 +93,7 @@ export function createFakeGitHubClient(
     branches,
     commits,
     pullRequests,
+    comments,
     callLog,
     async createIssue(input: CreateIssueInput): Promise<IssueRef> {
       callLog.push('createIssue');
@@ -98,6 +103,17 @@ export function createFakeGitHubClient(
         number,
         title: input.title,
         url: `https://github.com/${repo.owner}/${repo.repo}/issues/${number}`,
+      };
+    },
+    async createIssueComment(
+      input: CreateIssueCommentInput,
+    ): Promise<IssueCommentRef> {
+      callLog.push('createIssueComment');
+      comments.push(input);
+      const id = 900 + comments.length;
+      return {
+        id,
+        url: `https://github.com/${repo.owner}/${repo.repo}/issues/${input.issueNumber}#issuecomment-${id}`,
       };
     },
     async createBranch(input: CreateBranchInput): Promise<BranchRef> {

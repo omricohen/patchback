@@ -83,6 +83,26 @@ export interface ApiConfig {
   /** Triage demotion gate, default 0.7 (see @patchback/triage). */
   confidenceThreshold?: number;
   /**
+   * Issue-emitting ingest mode for GitHub Action deployments. DEFAULT-OFF:
+   * when this field is ABSENT, `POST /feedback` behaves exactly as today
+   * (create item + job, enqueue triage) — byte-identical. When SET, the
+   * feedback route becomes a thin, stateless, agent-free INGEST: it assigns
+   * the tier server-side (unchanged `resolveAuth`), signs an HMAC issue
+   * marker binding content+tier+nonce+repo, and opens a labeled GitHub issue
+   * for a GitHub Action to pick up. It enqueues no triage and runs no
+   * pipeline. Outsider feedback is accepted but NOT emitted as an issue
+   * (Action mode has no store to cluster it in) — outsider content never
+   * enters the repo. See `packages/api/src/issue-marker.ts`.
+   */
+  issueEmitter?: {
+    /** Symmetric HMAC key shared with the Action's `verifyIssueMarker`. */
+    signingSecret: string;
+    /** Label applied to the emitted issue (the workflow's trigger filter). Default `patchback`. */
+    label?: string;
+    /** Freshness window stamped conceptually; the verifier owns the actual check. */
+    freshnessWindowMs?: number;
+  };
+  /**
    * OPTIONAL repo-aware triage stage 2. When set, borderline stage-1 results
    * are re-classified against a deterministic fixed-string probe of a repo
    * working copy (paths + counts only). Only wired where a real on-disk
@@ -163,7 +183,19 @@ export function validateConfig(config: ApiConfig): void {
   ) {
     throw new ConfigError('confidenceThreshold must be within [0, 1]');
   }
-  if (config.pipeline === undefined) {
+  if (config.issueEmitter !== undefined) {
+    if (
+      typeof config.issueEmitter.signingSecret !== 'string' ||
+      config.issueEmitter.signingSecret.length < 16
+    ) {
+      throw new ConfigError(
+        'issueEmitter.signingSecret must be a string of at least 16 characters',
+      );
+    }
+  }
+  // The issue-emitting ingest runs no pipeline (it emits an issue for a
+  // GitHub Action to process), so it does not require a pipeline/adapter.
+  if (config.issueEmitter === undefined && config.pipeline === undefined) {
     if (config.adapter === undefined || config.repoSource === undefined) {
       throw new ConfigError(
         'either `pipeline` or both `adapter` and `repoSource` must be configured',

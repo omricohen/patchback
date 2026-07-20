@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import type {
   CaptureContext,
@@ -12,11 +12,13 @@ import { INITIAL_JOB_STATE, parseSourceHint } from '@patchback/types';
 import type { ApiConfig } from '../config.js';
 import { ApiError, notFound } from '../errors.js';
 import { generateId, generateReadToken, hashReadToken } from '../ids.js';
+import { buildSignedIssueBody } from '../issue-marker.js';
 import type { Store } from '../store/store.js';
 import { minTrustTier } from '../trust.js';
 import {
   CAPTURE_SCHEMA,
   canReadFeedback,
+  firstLine,
   ID_PARAMS_SCHEMA,
   MESSAGE_SCHEMA,
   SUBMITTER_SCHEMA,
@@ -71,6 +73,13 @@ export function registerFeedbackRoutes(
       },
     },
     async (request, reply) => {
+      // Issue-emitting ingest (GitHub Action mode). DEFAULT-OFF: absent
+      // `issueEmitter` ⇒ this branch never runs and behavior below is
+      // byte-identical to today.
+      if (config.issueEmitter !== undefined) {
+        return emitIssue(request, reply, config, nowIso);
+      }
+
       const created = await createItemWithJob(store, {
         message: request.body.message,
         trustTier: request.auth.tier,
@@ -216,6 +225,61 @@ export function registerFeedbackRoutes(
       });
     },
   );
+}
+
+/**
+ * The issue-emitting ingest path. Stateless and agent-free: assign the tier
+ * server-side (already on `request.auth`), sign an HMAC marker binding the
+ * feedback content + tier + nonce + repo, and open a labeled GitHub issue for
+ * a GitHub Action to process. No triage enqueue, no pipeline, no store writes.
+ *
+ * Outsider feedback is accepted (200) but NOT emitted as an issue — Action
+ * mode has no store to cluster outsider feedback in, so hostile/anonymous text
+ * never enters the repo. The pipeline's outsider defenses are still in place
+ * downstream as defense-in-depth (a signed outsider marker is short-circuited
+ * by triage and rejected by the guarded brief factory), but the primary
+ * control is simply not emitting.
+ */
+async function emitIssue(
+  request: FastifyRequest<{ Body: FeedbackBody }>,
+  reply: FastifyReply,
+  config: ApiConfig,
+  nowIso: () => string,
+): Promise<FastifyReply> {
+  const emitter = config.issueEmitter;
+  if (emitter === undefined) {
+    // Unreachable — the caller guards on this — but keep the type honest.
+    throw new ApiError(500, 'internal', 'issueEmitter not configured');
+  }
+  const tier = request.auth.tier;
+  if (tier === 'outsider') {
+    // Data only: never emitted as an issue, never turned into a job.
+    return reply.status(202).send({ emitted: false, tier });
+  }
+
+  const feedbackId = generateId();
+  const message = request.body.message;
+  const { owner, repo } = config.githubClient.repo;
+  const repoRef = `${owner}/${repo}`;
+  const { body } = buildSignedIssueBody({
+    feedbackText: message,
+    tier,
+    repo: repoRef,
+    feedbackId,
+    issuedAt: nowIso(),
+    secret: emitter.signingSecret,
+  });
+  const issue = await config.githubClient.createIssue({
+    title: firstLine(message),
+    body,
+    labels: [emitter.label ?? 'patchback'],
+  });
+  return reply.status(201).send({
+    emitted: true,
+    feedbackId,
+    issueNumber: issue.number,
+    issueUrl: issue.url,
+  });
 }
 
 interface CreateItemInput {
