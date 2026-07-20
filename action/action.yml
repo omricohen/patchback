@@ -1,0 +1,43 @@
+name: Patchback
+description: >-
+  Verify a patchback issue's signed HMAC marker and, if triage says patchable,
+  open a pull request. Never merges — PR review is the human gate.
+author: Patchback
+branding:
+  icon: git-pull-request
+  color: purple
+
+inputs:
+  anthropic-api-key:
+    description: Anthropic API key for triage and the coding agent (repo secret).
+    required: true
+  signing-secret:
+    description: >-
+      Shared HMAC signing secret; must equal the ingest's signing secret
+      (repo secret PATCHBACK_SIGNING_SECRET).
+    required: true
+  github-token:
+    description: >-
+      Token with contents:write, issues:write, pull-requests:write. Pass
+      ${{ secrets.GITHUB_TOKEN }} with those permissions set at the workflow
+      level.
+    required: true
+  version:
+    description: Published patchback CLI version to run (pin to an exact version).
+    required: false
+    default: 0.0.1
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+    # The CLI clones its OWN scratch dir (not $GITHUB_WORKSPACE), so no checkout
+    # is needed. `set -x` is deliberately NOT used — secrets must never echo.
+    - run: npx --yes patchback@${{ inputs.version }} ci
+      shell: bash
+      env:
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+        PATCHBACK_SIGNING_SECRET: ${{ inputs.signing-secret }}
+        GITHUB_TOKEN: ${{ inputs.github-token }}
