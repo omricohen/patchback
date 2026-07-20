@@ -225,8 +225,13 @@ switch (mode) {
     } else {
       writeFileSync(file, content.replace("label: ''", `label: '${to}'`));
       const extra = Array.from({ length: 12 }, (_, i) => `const b${i} = ${i};`);
-      writeFileSync('filler.js', readFileSync('filler.js', 'utf8') + extra.join('\n') + '\n');
-      printResult(`Repaired the label to ${JSON.stringify(to)} and extended filler.`);
+      writeFileSync(
+        'filler.js',
+        readFileSync('filler.js', 'utf8') + extra.join('\n') + '\n',
+      );
+      printResult(
+        `Repaired the label to ${JSON.stringify(to)} and extended filler.`,
+      );
     }
     break;
   }
