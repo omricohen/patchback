@@ -1,3 +1,4 @@
+import type { TokenProvider } from '@patchback/sdk';
 import type { Submitter } from '@patchback/types';
 
 import type { MaskingConfig } from './masking/policy.js';
@@ -21,8 +22,20 @@ export interface PatchbackWidgetConfig {
    * every visitor of that page an insider — only do this in internal apps
    * behind your own authentication. Omit for public pages: submissions land
    * as outsider (data only).
+   *
+   * For PUBLIC-FACING / multi-user apps prefer `getToken` instead: a
+   * short-lived, tier-scoped per-user token that is safe to expose in page
+   * source. `apiKey` and `getToken` are mutually exclusive.
    */
   apiKey?: string;
+  /**
+   * A per-user short-lived-token provider (RECOMMENDED for public-facing
+   * apps). The widget calls it to obtain a token from YOUR app's own backend
+   * (which exchanges its server key at Patchback's `POST /tokens/exchange` —
+   * the widget never calls that endpoint and never sees your key), caches it,
+   * and refreshes it before expiry. Mutually exclusive with `apiKey`.
+   */
+  getToken?: TokenProvider;
   /** Identity asserted by the embedding app. The widget never sniffs it. */
   submitter?: Submitter;
   capture?: CaptureConfig;
@@ -125,5 +138,11 @@ export function resolveCaptureConfig(
 export function validateWidgetConfig(config: PatchbackWidgetConfig): void {
   if (typeof config.apiUrl !== 'string' || config.apiUrl.trim() === '') {
     throw new WidgetConfigError('apiUrl is required');
+  }
+  if (config.apiKey !== undefined && config.getToken !== undefined) {
+    throw new WidgetConfigError(
+      'pass either `apiKey` OR `getToken`, not both — the direct key and the ' +
+        'per-user token path are mutually exclusive',
+    );
   }
 }

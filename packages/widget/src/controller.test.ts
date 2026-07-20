@@ -106,6 +106,57 @@ describe('widget lifecycle', () => {
     );
   });
 
+  it('rejects configuring both apiKey and getToken', () => {
+    expect(() =>
+      makeWidget({
+        apiKey: 'k'.repeat(24),
+        getToken: async () => ({ token: 'pbt_x', expiresAt: '' }),
+      }),
+    ).toThrow(/mutually exclusive/);
+  });
+
+  it('submits with a per-user token obtained from getToken', async () => {
+    const getToken = vi.fn(async () => ({
+      token: 'pbt_minted-token',
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    }));
+    const seen: string[] = [];
+    const fetchMock = vi.fn(
+      async (
+        input: string,
+        init?: { headers?: Record<string, string> },
+      ) => {
+        if (input.endsWith('/feedback')) {
+          seen.push(init?.headers?.authorization ?? 'none');
+          return jsonResponse(201, {
+            id: 'fb-1',
+            jobId: 'job-1',
+            readToken: 'tok-1',
+          });
+        }
+        return jsonResponse(404, { error: { code: 'not_found', message: '' } });
+      },
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const widget = makeWidget({ getToken });
+    widget.open();
+    const shadow = (
+      document.querySelector('[data-patchback-widget]') as HTMLElement
+    ).shadowRoot as ShadowRoot;
+    const textarea = shadow.querySelector('textarea') as HTMLTextAreaElement;
+    textarea.value = 'The label is wrong';
+    textarea.dispatchEvent(new Event('input'));
+    const submit = Array.from(shadow.querySelectorAll('button')).find(
+      (b) => b.textContent === 'Send feedback',
+    ) as HTMLButtonElement;
+    submit.click();
+    await vi.waitFor(() => expect(seen.length).toBe(1));
+
+    expect(getToken).toHaveBeenCalled();
+    expect(seen[0]).toBe('Bearer pbt_minted-token');
+  });
+
   it('submits through the SDK and renders the thread view with a status chip', async () => {
     const fetchMock = vi.fn(async (input: string) => {
       if (input.endsWith('/feedback')) {

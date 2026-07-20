@@ -70,7 +70,12 @@ export function createWidgetController(
   const client: PatchbackClient = createPatchbackClient({
     baseUrl: config.apiUrl,
     ...(config.apiKey !== undefined ? { apiKey: config.apiKey } : {}),
+    ...(config.getToken !== undefined ? { getToken: config.getToken } : {}),
   });
+  // Either credential can authorize elevated actions (starting a patch); the
+  // server re-enforces every tier gate regardless.
+  const hasElevatedCredential =
+    config.apiKey !== undefined || config.getToken !== undefined;
   const threads: ThreadStore = createThreadStore({
     persist: config.persistThreads ?? false,
     apiUrl: config.apiUrl,
@@ -191,7 +196,7 @@ export function createWidgetController(
       {
         ...(threadResponse !== undefined ? { thread: threadResponse } : {}),
         ...(status !== undefined ? { status } : {}),
-        hasApiKey: config.apiKey !== undefined,
+        hasApiKey: hasElevatedCredential,
         submittingReply,
         startingPatch,
         connectionLost,
