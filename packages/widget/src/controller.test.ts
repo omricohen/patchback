@@ -122,10 +122,7 @@ describe('widget lifecycle', () => {
     }));
     const seen: string[] = [];
     const fetchMock = vi.fn(
-      async (
-        input: string,
-        init?: { headers?: Record<string, string> },
-      ) => {
+      async (input: string, init?: { headers?: Record<string, string> }) => {
         if (input.endsWith('/feedback')) {
           seen.push(init?.headers?.authorization ?? 'none');
           return jsonResponse(201, {

@@ -60,7 +60,9 @@ function exchange(
     url: '/tokens/exchange',
     headers: {
       'content-type': 'application/json',
-      ...(opts.key !== undefined ? { authorization: `Bearer ${opts.key}` } : {}),
+      ...(opts.key !== undefined
+        ? { authorization: `Bearer ${opts.key}` }
+        : {}),
       ...opts.headers,
     },
     payload: opts.body ?? {},
@@ -70,7 +72,10 @@ function exchange(
 describe('POST /tokens/exchange — auth & no-chaining', () => {
   it('mints a token for a valid parent key (201)', async () => {
     const app = makeApp();
-    const res = await exchange(app, { key: OWNER_KEY, body: { tier: 'insider' } });
+    const res = await exchange(app, {
+      key: OWNER_KEY,
+      body: { tier: 'insider' },
+    });
     expect(res.statusCode).toBe(201);
     const body = res.json() as {
       token: string;
@@ -150,7 +155,9 @@ describe('POST /tokens/exchange — server-only enforcement', () => {
   });
 
   it('is NEVER CORS-exposed: a preflight gets no Access-Control-Allow-Origin, even with cors configured', async () => {
-    const app = makeApp({ cors: { allowedOrigins: ['http://localhost:3000'] } });
+    const app = makeApp({
+      cors: { allowedOrigins: ['http://localhost:3000'] },
+    });
     const res = await app.inject({
       method: 'OPTIONS',
       url: '/tokens/exchange',
@@ -164,7 +171,9 @@ describe('POST /tokens/exchange — server-only enforcement', () => {
   });
 
   it('a real POST with an allowed Origin still gets no CORS header AND is 403ed', async () => {
-    const app = makeApp({ cors: { allowedOrigins: ['http://localhost:3000'] } });
+    const app = makeApp({
+      cors: { allowedOrigins: ['http://localhost:3000'] },
+    });
     const res = await exchange(app, {
       key: OWNER_KEY,
       headers: { origin: 'http://localhost:3000' },
@@ -177,7 +186,10 @@ describe('POST /tokens/exchange — server-only enforcement', () => {
 describe('POST /tokens/exchange — tier ceiling', () => {
   it('an insider key requesting owner → 403 tier_ceiling', async () => {
     const app = makeApp();
-    const res = await exchange(app, { key: INSIDER_KEY, body: { tier: 'owner' } });
+    const res = await exchange(app, {
+      key: INSIDER_KEY,
+      body: { tier: 'owner' },
+    });
     expect(res.statusCode).toBe(403);
     expect((res.json() as { error: { code: string } }).error.code).toBe(
       'tier_ceiling',
@@ -186,7 +198,10 @@ describe('POST /tokens/exchange — tier ceiling', () => {
 
   it('an owner key requesting insider → 201 insider', async () => {
     const app = makeApp();
-    const res = await exchange(app, { key: OWNER_KEY, body: { tier: 'insider' } });
+    const res = await exchange(app, {
+      key: OWNER_KEY,
+      body: { tier: 'insider' },
+    });
     expect(res.statusCode).toBe(201);
     expect((res.json() as { tier: string }).tier).toBe('insider');
   });

@@ -21,7 +21,8 @@ import { timingSafeStringEqual } from './ids.js';
  */
 
 /** How the caller authenticated — the `no-chaining` discriminator, among other uses. */
-export type AuthVia = 'api-key' | 'browser-token' | 'read-token-candidate' | 'none';
+export type AuthVia =
+  'api-key' | 'browser-token' | 'read-token-candidate' | 'none';
 
 export interface RequestAuth {
   tier: TrustTier;

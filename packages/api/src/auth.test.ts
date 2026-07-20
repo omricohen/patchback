@@ -1,10 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { resolveAuth, type BrowserTokenVerifier } from './auth.js';
-import {
-  mintBrowserToken,
-  verifyBrowserToken,
-} from './browser-token.js';
+import { mintBrowserToken, verifyBrowserToken } from './browser-token.js';
 import {
   ConfigError,
   validateConfig,
@@ -119,7 +116,11 @@ describe('resolveAuth — browser token branch', () => {
   });
 
   it('an API key still wins over the token branch (keys checked first)', () => {
-    const auth = resolveAuth('Bearer owner-key-0123456789abcdef', KEYS, verifier);
+    const auth = resolveAuth(
+      'Bearer owner-key-0123456789abcdef',
+      KEYS,
+      verifier,
+    );
     expect(auth).toEqual({ tier: 'owner', via: 'api-key', keyLabel: 'omri' });
   });
 
@@ -265,7 +266,9 @@ describe('validateConfig', () => {
 
     it('rejects a short explicit signingSecret', () => {
       expect(() =>
-        validateConfig(baseConfig({ tokenExchange: { signingSecret: 'short' } })),
+        validateConfig(
+          baseConfig({ tokenExchange: { signingSecret: 'short' } }),
+        ),
       ).toThrow(/signingSecret/);
     });
 

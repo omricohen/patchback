@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 
 import { canInitiatePatchJob } from '@patchback/types';
 
@@ -56,7 +56,8 @@ export function resolveTokenExchange(config: ApiConfig): ResolvedTokenExchange {
     );
   }
   const maxTtlMs = te.maxTtlMs ?? DEFAULT_MAX_TOKEN_TTL_MS;
-  const defaultTtlMs = te.defaultTtlMs ?? Math.min(DEFAULT_TOKEN_TTL_MS, maxTtlMs);
+  const defaultTtlMs =
+    te.defaultTtlMs ?? Math.min(DEFAULT_TOKEN_TTL_MS, maxTtlMs);
   return { secret, defaultTtlMs, maxTtlMs };
 }
 
@@ -73,10 +74,11 @@ export function resolveTokenExchange(config: ApiConfig): ResolvedTokenExchange {
  *     phase. This ALSO blocks token-chaining: a request authenticated by a
  *     browser token (via === 'browser-token') is rejected, so a minted token
  *     can never mint further tokens.
- *  2. Active browser-indicator rejection (defense-in-depth): any `Origin` or
- *     `Sec-Fetch-*` header ⇒ 403 `server_only`. These are forbidden header
- *     names that page JavaScript cannot set or spoof; a server-to-server
- *     client simply omits them.
+ *  2. Active browser-indicator rejection (defense-in-depth): an `Origin`,
+ *     `Sec-Fetch-Site`, or `Sec-Fetch-Dest` header ⇒ 403 `server_only`. These
+ *     are forbidden header names page JavaScript cannot set or spoof, and a
+ *     server-to-server client does not send them. See `rejectBrowserOrigin`
+ *     for why `Sec-Fetch-Mode` is deliberately excluded.
  *  3. Never CORS-exposed: an `onSend` hook strips every CORS header from this
  *     route's responses, so even with `cors` configured a preflight gets no
  *     `Access-Control-Allow-Origin` and the browser blocks the real request
@@ -123,7 +125,10 @@ export function registerTokenRoutes(
     async (request, reply) => {
       // Layer 1: a REAL parent API key is required. This rejects keyless
       // callers, outsiders, AND browser tokens (no chaining) in one check.
-      if (request.auth.via !== 'api-key' || !canInitiatePatchJob(request.auth.tier)) {
+      if (
+        request.auth.via !== 'api-key' ||
+        !canInitiatePatchJob(request.auth.tier)
+      ) {
         throw new ApiError(
           403,
           'tier_forbidden',
@@ -180,10 +185,7 @@ export function registerTokenRoutes(
  * app-backend caller. `Origin` + `Sec-Fetch-Site` already catch every real
  * browser.
  */
-async function rejectBrowserOrigin(
-  request: FastifyRequest,
-  _reply: FastifyReply,
-): Promise<void> {
+async function rejectBrowserOrigin(request: FastifyRequest): Promise<void> {
   const h = request.headers;
   if (
     h.origin !== undefined ||

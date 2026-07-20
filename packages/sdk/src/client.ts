@@ -135,7 +135,9 @@ export function createPatchbackClient(
   let cached: { token: string; expiresAtMs: number } | undefined;
 
   /** The current app-credential bearer value (fresh token / static key / none). */
-  async function appCredential(forceRefresh = false): Promise<string | undefined> {
+  async function appCredential(
+    forceRefresh = false,
+  ): Promise<string | undefined> {
     if (apiKey !== undefined) {
       return apiKey;
     }

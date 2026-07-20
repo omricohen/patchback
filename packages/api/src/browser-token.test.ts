@@ -48,9 +48,13 @@ describe('signBrowserToken / verifyBrowserToken round trip', () => {
   });
 
   it('carries an audit-only subject when supplied', () => {
-    const result = verifyBrowserToken(mint({ subject: 'app-user-42' }), SECRET, {
-      now,
-    });
+    const result = verifyBrowserToken(
+      mint({ subject: 'app-user-42' }),
+      SECRET,
+      {
+        now,
+      },
+    );
     expect(result.ok && result.payload.sub).toBe('app-user-42');
   });
 
@@ -84,21 +88,29 @@ describe('verifyBrowserToken rejects — the tamper battery', () => {
       ok: false,
       reason: 'malformed',
     });
-    expect(verifyBrowserToken('xxx_garbage.deadbeef', SECRET, { now })).toEqual({
-      ok: false,
-      reason: 'malformed',
-    });
+    expect(verifyBrowserToken('xxx_garbage.deadbeef', SECRET, { now })).toEqual(
+      {
+        ok: false,
+        reason: 'malformed',
+      },
+    );
   });
 
   it('truncated / garbage body → malformed', () => {
-    expect(verifyBrowserToken(`${BROWSER_TOKEN_PREFIX}nodot`, SECRET, { now })).toEqual({
+    expect(
+      verifyBrowserToken(`${BROWSER_TOKEN_PREFIX}nodot`, SECRET, { now }),
+    ).toEqual({
       ok: false,
       reason: 'malformed',
     });
     expect(
-      verifyBrowserToken(`${BROWSER_TOKEN_PREFIX}!!!.${'a'.repeat(64)}`, SECRET, {
-        now,
-      }),
+      verifyBrowserToken(
+        `${BROWSER_TOKEN_PREFIX}!!!.${'a'.repeat(64)}`,
+        SECRET,
+        {
+          now,
+        },
+      ),
     ).toEqual({ ok: false, reason: 'malformed' });
   });
 
@@ -138,7 +150,9 @@ describe('verifyBrowserToken rejects — the tamper battery', () => {
     });
     const sig = token.slice(token.indexOf('.') + 1);
     const forged: BrowserTokenPayload = { ...payload, tier: 'owner' };
-    const wire = Buffer.from(canonicalJson(forged), 'utf8').toString('base64url');
+    const wire = Buffer.from(canonicalJson(forged), 'utf8').toString(
+      'base64url',
+    );
     const tampered = `${BROWSER_TOKEN_PREFIX}${wire}.${sig}`;
     expect(verifyBrowserToken(tampered, SECRET, { now })).toEqual({
       ok: false,

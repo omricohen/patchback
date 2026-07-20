@@ -237,7 +237,8 @@ export function validateConfig(config: ApiConfig): void {
       );
     }
     const maxTtlMs = te.maxTtlMs ?? DEFAULT_MAX_TOKEN_TTL_MS;
-    const defaultTtlMs = te.defaultTtlMs ?? Math.min(DEFAULT_TOKEN_TTL_MS, maxTtlMs);
+    const defaultTtlMs =
+      te.defaultTtlMs ?? Math.min(DEFAULT_TOKEN_TTL_MS, maxTtlMs);
     if (te.maxTtlMs !== undefined && !(te.maxTtlMs > 0)) {
       throw new ConfigError('tokenExchange.maxTtlMs must be a positive number');
     }
