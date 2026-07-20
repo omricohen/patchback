@@ -159,6 +159,24 @@ button { font: inherit; cursor: pointer; }
 .pb-error { color: #a1372c; margin-top: 8px; }
 .pb-muted { color: var(--patchback-muted-fg, #5a6478); font-size: 12px; }
 a.pb-pr-link { color: var(--patchback-accent, #2f6fed); }
+a.pb-preview-link { color: var(--patchback-accent, #2f6fed); }
+
+.pb-ai-summary {
+  margin: 8px 0;
+  border-left: 3px solid var(--patchback-accent, #2f6fed);
+  background: var(--patchback-muted-bg, #f6f8fb);
+  padding: 8px 10px;
+  border-radius: 0 8px 8px 0;
+}
+.pb-ai-summary strong {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--patchback-muted-fg, #5a6478);
+  margin-bottom: 4px;
+}
+.pb-ai-summary p { margin: 0; word-break: break-word; }
 
 .pb-picker-overlay {
   position: fixed;

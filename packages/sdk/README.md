@@ -90,6 +90,18 @@ callback; resolves at terminal states (`feedback.needs_clarification`,
 `patch.failed`, `feedback.closed`); stops hard on 404; and accepts an
 `AbortSignal` (page-visibility pausing is the caller's job).
 
+## Outcome fields on the job status
+
+`JobStatusResponse` carries two optional, non-technical outcome fields once a
+PR exists (both served to the read-token holder / owner-insider keys, both
+absent when unset — the DTO is byte-identical to a job without them):
+
+- `userSummary?: string` — a plain-language summary of what changed. Display
+  text; if you render it, escape it (the widget uses a text node).
+- `previewUrl?: string` — your preview provider's URL for this change, surfaced
+  from GitHub. Validated `http(s)` server-side; re-validate before using it as
+  an `href`.
+
 ## Contract
 
 Response DTO types live here, composed from `@patchback/types`

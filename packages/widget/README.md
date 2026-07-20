@@ -196,3 +196,22 @@ with an app credential (`apiKey` or `getToken`) + `feedback.triaged` +
 `patchable` — presentation only,
 the server re-enforces every gate. There is no auto-merge anywhere:
 `pr.reviewed` and beyond only happen through human action on GitHub.
+
+## Outcome view: change summary + preview link
+
+Once a PR exists, the thread can show two extra, non-technical elements to the
+read-token holder (whatever the status API returns):
+
+- **`userSummary`** — a plain-language "What changed" note. It is agent output
+  rendered as a **DOM text node** (never `innerHTML`), so a summary containing
+  markup shows as literal text and cannot inject anything.
+- **`previewUrl`** — a hardened "Preview this change" anchor
+  (`rel="noopener noreferrer"`, `target="_blank"`, no auto-navigation). The
+  widget re-validates the URL as `http(s)` before setting the `href`, so a
+  hostile `javascript:`/`data:` value renders **no** link. This is your own
+  preview provider's URL surfaced from GitHub — Patchback does not create
+  previews and does not gate the URL's reachability (use your provider's
+  preview protection if it must stay private).
+
+Both are absent-safe: when the status has neither field, the thread DOM is
+unchanged. Styling hooks: `.pb-ai-summary` and `a.pb-preview-link`.
