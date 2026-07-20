@@ -21,4 +21,8 @@ regexes = [
   # (e.g. ghp_test, github_pat_test_000…, ghp_000…test).
   '''gh[pousr]_(test|0{10,}[A-Za-z0-9_]*)''',
   '''github_pat_(test|super_secret_value|0{10,})[A-Za-z0-9_]*''',
+  # Ingest/CI HMAC signing-secret fixtures in *.test.ts (feedback.emitter,
+  # ci.e2e): '<prefix>-signing-secret-0123456789…'. Sequential-digit bodies,
+  # never a real secret.
+  '''[a-z]+-signing-secret-0123456789[a-z0-9]*''',
 ]
