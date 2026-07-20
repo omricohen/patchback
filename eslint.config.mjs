@@ -14,6 +14,8 @@ export default tseslint.config(
       '.turbo/**',
       '.a5c/**',
       'extraction-inbox/**',
+      // Synthetic fixture repo — data for the retrieval evals, not our source.
+      '**/evals/fixtures/repo/**',
     ],
   },
   eslint.configs.recommended,

@@ -20,6 +20,7 @@ import { describe, expect, it } from 'vitest';
 
 import { createAnthropicModelCaller } from '../src/anthropic.js';
 import { triageFeedback } from '../src/classifier.js';
+import { createFixtureRepoProbe } from './local-probe.js';
 import {
   formatScore,
   hydrateFixture,
@@ -27,6 +28,13 @@ import {
   type EvalFixture,
   type FixtureOutcome,
 } from './score.js';
+
+/** Retrieval (stage-2) fixtures are tagged with a `retrieval*` tag. */
+function usesRepoProbe(fixture: EvalFixture): boolean {
+  return fixture.tags.some((tag) => tag.startsWith('retrieval'));
+}
+
+const fixtureRepoDir = new URL('./fixtures/repo', import.meta.url).pathname;
 
 const hasKey = Boolean(process.env.ANTHROPIC_API_KEY);
 
@@ -63,7 +71,8 @@ async function mapWithConcurrency<T, R>(
 
 describe.skipIf(!hasKey)('triage eval suite (env-gated, live model)', () => {
   it('sanity: the fixture set matches the plan composition', () => {
-    expect(fixtures.length).toBe(30);
+    // Base set (31) + the 8 Phase-3 borderline retrieval fixtures.
+    expect(fixtures.length).toBe(39);
     const injections = fixtures.filter((f) => f.mustNotBe !== null);
     expect(injections.length).toBeGreaterThanOrEqual(6);
     for (const injection of injections) {
@@ -73,6 +82,13 @@ describe.skipIf(!hasKey)('triage eval suite (env-gated, live model)', () => {
       // case: a patch-eligible tier.
       expect(['owner', 'insider']).toContain(injection.feedback.trustTier);
     }
+    // Retrieval fixtures exist, carry a probe expectation, and include at least
+    // one injection fixture with a clean single-file match (retrieval must not
+    // launder it into patchable).
+    const retrieval = fixtures.filter(usesRepoProbe);
+    expect(retrieval.length).toBeGreaterThanOrEqual(8);
+    const retrievalInjections = retrieval.filter((f) => f.mustNotBe !== null);
+    expect(retrievalInjections.length).toBeGreaterThanOrEqual(1);
   });
 
   it(
@@ -80,6 +96,7 @@ describe.skipIf(!hasKey)('triage eval suite (env-gated, live model)', () => {
     { timeout: 15 * 60 * 1000 },
     async () => {
       const callModel = createAnthropicModelCaller();
+      const repoProbe = createFixtureRepoProbe(fixtureRepoDir);
 
       for (let run = 1; run <= RUNS; run += 1) {
         const outcomes: FixtureOutcome[] = await mapWithConcurrency(
@@ -89,6 +106,9 @@ describe.skipIf(!hasKey)('triage eval suite (env-gated, live model)', () => {
             fixture,
             result: await triageFeedback(hydrateFixture(fixture), {
               callModel,
+              // Stage 2 is wired ONLY for retrieval fixtures; the fixture-repo
+              // probe is harmless for the rest (they are not borderline).
+              ...(usesRepoProbe(fixture) ? { repoProbe } : {}),
             }),
           }),
         );

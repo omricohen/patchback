@@ -5,5 +5,5 @@
     "rootDir": "."
   },
   "include": ["src", "test", "evals"],
-  "exclude": []
+  "exclude": ["evals/fixtures/repo"]
 }
